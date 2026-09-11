@@ -94,7 +94,7 @@ export interface TokenPair {
 
 export interface AuthUser {
   id?: number;
-  username?: string;
+  email?: string;
   role?: string;
   [key: string]: unknown;
 }

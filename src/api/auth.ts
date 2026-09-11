@@ -6,11 +6,11 @@ interface LoginResponse extends TokenPair {
   user?: AuthUser;
 }
 
-export async function login(username: string, password: string): Promise<AuthUser> {
+export async function login(email: string, password: string): Promise<AuthUser> {
   const data = await request<LoginResponse>("/auth/token/", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email, password }),
   });
 
   useAuthStore.getState().setTokens({
@@ -18,7 +18,7 @@ export async function login(username: string, password: string): Promise<AuthUse
     refresh: data.refresh,
   });
 
-  const user = data.user ?? { username };
+  const user = data.user ?? { email };
   useAuthStore.getState().setUser(user);
   return user;
 }

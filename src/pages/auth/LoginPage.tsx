@@ -7,7 +7,7 @@ import { login } from "@/api/auth";
 import { ApiError } from "@/api/client";
 
 const loginSchema = z.object({
-  username: z.string().min(1, "El usuario es obligatorio"),
+  email: z.string().email("Ingresa un correo válido"),
   password: z.string().min(1, "La contraseña es obligatoria"),
 });
 
@@ -29,7 +29,7 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(values.username, values.password);
+      await login(values.email, values.password);
       const from = (location.state as { from?: string } | null)?.from ?? "/admin";
       navigate(from, { replace: true });
     } catch (err) {
@@ -60,18 +60,19 @@ export default function LoginPage() {
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
           <div>
-            <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Usuario
+            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-700">
+              Correo electrónico
             </label>
             <input
-              id="username"
-              autoComplete="username"
-              {...register("username")}
+              id="email"
+              type="email"
+              autoComplete="email"
+              {...register("email")}
               className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
             />
-            {errors.username && (
+            {errors.email && (
               <p className="mt-1 text-xs text-error-600" role="alert">
-                {errors.username.message}
+                {errors.email.message}
               </p>
             )}
           </div>

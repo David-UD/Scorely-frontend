@@ -42,7 +42,7 @@ describe("RoleGuard", () => {
     useAuthStore.setState({
       accessToken: "test-access-token",
       refreshToken: "test-refresh-token",
-      user: { username: "admin", role: "admin" },
+      user: { email: "admin@scorely.com", role: "admin" },
     });
 
     render(<TestApp />);

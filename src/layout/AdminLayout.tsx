@@ -28,7 +28,7 @@ export default function AdminLayout() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              {user?.username ?? "Administrador"}
+              {user?.email ?? "Administrador"}
             </span>
             <button
               onClick={handleLogout}
