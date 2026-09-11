@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.local
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Referencia read-only (template clonado, no es parte del proyecto)
+free-react-tailwind-admin-dashboard/
+
+# Test artifacts
+coverage
+playwright-report
+test-results
