@@ -78,3 +78,46 @@ Implementación de las **vistas públicas de Scorely** (spec Parte II de `PROMPT
 - **Frontend** (`src/api/public.ts`): el API devuelve `category` como string y los bloques no traen `competition_id`/`stage`. `normalizeLeaderboards` ahora mapea a `Leaderboard[]` (genera `code` slugificado de la categoría e inyecta id/stage).
 - **404 = sin resultados**: `getLeaderboard` trata el 404 de una etapa sin leaderboard como lista vacía (estado vacío en la UI, no error).
 - Tests nuevos: `tests/publicApi.test.ts` (mapeo, category objeto, 404→vacío, otros errores re-lanzan). Suite frontend: **18/18**.
+
+## Paso 16 — Bugfix: índice con todas las publicaciones + admin scope + PROMPT (COMPLETADO)
+
+Problemas reportados por el usuario:
+1. El índice `/` solo mostraba las competiciones **asignadas al usuario** después de login (debía mostrar todas las publicadas, con o sin sesión).
+2. `/admin/events` y `/admin/teams` mostraban estados vacíos (no se veían los eventos/equipos de la competición asignada).
+3. El `PROMPT.md` no documentaba los endpoints de **creación** de eventos y equipos.
+
+### Causas raíz
+- **Índice filtrado**: las funciones de `src/api/public.ts` usaban `request()` con `auth: true` por defecto → el JWT se adjuntaba y el backend (`IsAuthenticatedOrReadOnly` + `get_queryset()`) filtraba competiciones por usuario asignado.
+- **Admin vacío**: `adminScopeStore.competitionId` iniciaba en `null`; `CompetitionScopeSelect` calculaba `effectiveId` (primera competición) solo para mostrar el `<select>`, pero **nunca lo escribía** en el store → las queries `useAdminEvents`/`useAdminTeams` quedaban deshabilitadas (`enabled: Boolean(null)`).
+
+### Cambios aplicados
+- `src/api/public.ts`: las 5 funciones de lectura pública (`getCompetitions`, `getCompetition`, `getCompetitionStages`, `getEvents`, `getLeaderboard`) ahora pasan `{ auth: false }` a `request()`. Las vistas públicas ya no adjuntan el JWT.
+- `src/components/admin/CompetitionScopeSelect.tsx`: `useEffect` que auto-escribe `effectiveId` (primera competición) en `adminScopeStore` cuando no hay selección válida. Con esto `/admin/events` y `/admin/teams` cargan los datos de la competición asignada de inmediato.
+- `PROMPT.md`: sección 7 ampliada con endpoints de escritura de eventos y equipos (POST/PATCH/DELETE/GET) y catálogos; secciones 5 y 12 actualizadas (regla de "todas las publicadas sin importar login" y auto-selección del scope admin).
+
+### Verificación
+- `npm run lint` → OK
+- `npm run typecheck` → OK
+- `npm run test` → OK
+- `npm run build` → OK
+- Cobertura manual: `/` (sin/con sesión) → todas las competiciones publicadas; `/admin/events` y `/admin/teams` → datos de la competición asignada.
+
+## Paso 17 — Bugfix: admin muestra solo competiciones asignadas (COMPLETADO)
+
+Problema reportado por el usuario:
+1. `/admin/competitions` estaba mostrando **todas** las competiciones (en vez de solo las asignadas al usuario).
+2. El select de eventos y equipos (`CompetitionScopeSelect`) también mostraba todas (en vez de las asignadas).
+
+### Causa raíz
+`fetchAdminCompetitions()` (`src/api/admin.ts`) delegaba en `getCompetitions()` de `public.ts`, que tras el Paso 16 pasa `{ auth: false }`. Al no adjuntar el JWT, el backend (`IsAuthenticatedOrReadOnly` + `get_queryset()`) no filtraba por usuario y devolvía todas las publicadas. El hook `useAdminCompetitions` lo usan `CompetitionsPage` y `CompetitionScopeSelect`, por eso ambos mostraban todo.
+
+### Cambios aplicados
+- `src/api/admin.ts`: `fetchAdminCompetitions()` ahora usa `fetchCatalog<Competition>("/competitions/?page_size=100")`, que llama a `request(path)` con `auth` por defecto (`true`) → se adjunta el JWT y el backend devuelve **solo las competiciones asignadas** (o todas para superusuario). Eliminado el import de `getCompetitions` de `./public`.
+- `tests/adminApi.test.ts` (nuevo): fija que `fetchAdminCompetitions` llama a `request("/competitions/?page_size=100")` **sin** `{ auth: false }` y que desempaqueta resultados paginados.
+
+### Verificación
+- `npm run lint` → OK
+- `npm run typecheck` → OK
+- `npm run test` → **31/31** en verde (7 archivos)
+- `npm run build` → OK
+- Cobertura manual: con sesión, `/admin/competitions`, eventos y equipos muestran solo las competiciones asignadas al usuario; `/` público sigue mostrando todas las publicadas.

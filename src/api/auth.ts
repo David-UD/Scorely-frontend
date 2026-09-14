@@ -18,7 +18,7 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     refresh: data.refresh,
   });
 
-  const user = data.user ?? { email };
+  const user = await fetchCurrentUser().catch(() => ({ email }));
   useAuthStore.getState().setUser(user);
   return user;
 }
@@ -28,5 +28,5 @@ export function logout() {
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser> {
-  return request<AuthUser>("/auth/users/me/");
+  return request<AuthUser>("/auth/me/");
 }

@@ -180,6 +180,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 - El leaderboard muestra los filtros disponibles: etapa (qualifier/final) y categorías.
 - Usuario sin login que intenta entrar a `/admin/*` → redirigir a login.
 - Inicio: competencias recientes ordenadas por fecha de inicio (desc) + pestaña "todas".
+- El inicio **siempre muestra todas las competiciones publicadas**, inicie sesión o no (las vistas públicas no adjuntan el token JWT).
+- `/admin/events` y `/admin/teams` cargan los datos de la competición asignada; si no hay selección previa, se auto-selecciona la primera competición disponible.
 - `[COMPLETAR …]`
 
 ## 6. Datos / DTOs
@@ -201,6 +203,37 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 | Eventos/WODs de un stage | GET | `/api/v1/events/?competition_stage={id}` | Pública pendiente (hoy JWT) | `event_number`, `name`, `event_result_type`, `rank_direction` |
 | Leaderboard qualifier | GET | `/api/v1/leaderboards/competition/{id}/qualifier/` | **Pública** | Permite ver filtros/categorías del payload |
 | Leaderboard final | GET | `/api/v1/leaderboards/competition/{id}/final/` | **Pública** | Igual que qualifier |
+
+### Endpoints de escritura — Eventos
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Crear evento | POST | `/api/v1/events/` | JWT | Payload: `{ competition_stage: number, event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
+| Actualizar evento | PATCH | `/api/v1/events/{id}/` | JWT | Mismo payload (campos parciales) |
+| Eliminar evento | DELETE | `/api/v1/events/{id}/` | JWT | — |
+| Obtener evento | GET | `/api/v1/events/{id}/` | JWT | — |
+
+> Un evento se asocia a una **etapa** (`competition_stage`), no a la competición directamente. Para crearlo, primero se obtiene la etapa de la competición (`GET /api/v1/competition-stages/?competition={id}`) y se usa su `id` como `competition_stage`.
+
+### Endpoints de escritura — Equipos
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Crear equipo | POST | `/api/v1/teams/` | JWT | Payload: `{ name: string, competition: number }` |
+| Actualizar equipo | PATCH | `/api/v1/teams/{id}/` | JWT | `{ name?: string }` |
+| Eliminar equipo | DELETE | `/api/v1/teams/{id}/` | JWT | — |
+| Obtener equipo | GET | `/api/v1/teams/{id}/` | JWT | — |
+
+> Un equipo se asocia directamente a una **competición** por su `id` (`competition`).
+
+### Catálogos
+
+| Acción | Método | URL | Auth |
+|--------|--------|-----|------|
+| Tipos de competición | GET | `/api/v1/competition-types/` | JWT |
+| Estados de competición | GET | `/api/v1/status-competitions/` | JWT |
+| Filiações | GET | `/api/v1/affiliations/` | JWT |
+| Sedes/locations | GET | `/api/v1/locations/` | JWT |
 
 ## 8. Cambios en componentes / estructura
 
@@ -248,6 +281,8 @@ Checklist verificable al terminar:
 
 ## 12. Observaciones / riesgos
 
+- **Públicos sin token (RESUELTO en frontend):** las páginas públicas llaman a los endpoints de lectura con `auth: false` (`src/api/public.ts`). Si el backend filtra competiciones por usuario autenticado (`get_queryset()`), el JWT **nunca** se adjunta en `/` ni en el detalle → se ven **todas las competiciones publicadas** sin importar el login.
+- **Admin scope (RESUELTO en frontend):** `CompetitionScopeSelect` auto-selecciona la primera competición si no hay selección previa (`useEffect` → `adminScopeStore.setCompetitionId`). Con ello `/admin/events` y `/admin/teams` cargan los datos de la competición asignada en vez de mostrar estados vacíos.
 - **DECISIÓN PENDIENTE (aplazada — se resuelve en otro momento):** el backend solo expone `leaderboards` con `AllowAny`; `competitions`, `competition-stages` y `events` requieren JWT por defecto. Para que `/` y el detalle sean consultables sin login hace falta o bien (a) abrir esos GET al público (cambio backend), o (b) exigir login también en las páginas públicas. **No implementar esta iteración; pendiente de decisión posterior.** Hasta entonces la spec asume acceso con JWT.
 - Mapa: se propone **embed de OpenStreetMap** (gratis, sin API key) con `latitude`/`longitude` de `Location`. Google Maps Embed requiere API key.
 - El API referencia competiciones por `id` (no por `slug`), aunque el modelo tenga `slug`: usar rutas por id o plantear cambio a lookup por slug en el backend.

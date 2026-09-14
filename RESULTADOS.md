@@ -1,6 +1,6 @@
 # RESULTADOS — Implementación de las vistas públicas de Scorely
 
-Fecha: 2026-09-11
+Fecha: 2026-09-11 (iteración inicial) / 2026-09-14 (bugfixes)
 Proyecto: Scorely-frontend (raíz, creado desde cero)
 Especificación: `PROMPT.md` (Parte II — Pantalla pública con información del sistema)
 
@@ -15,7 +15,7 @@ Especificación: `PROMPT.md` (Parte II — Pantalla pública con información de
 | Leaderboard público con pestañas Qualifier/Final y filtro de categoría | ✅ |
 | `/login` (react-hook-form + zod, JWT) | ✅ |
 | `/admin/*` protegido por `RoleGuard` (sin sesión → `/login`) | ✅ |
-| E2E/Tests: Vitest + RTL (14 tests) | ✅ |
+| E2E/Tests: Vitest + RTL (31 tests) | ✅ |
 | Idioma español, tema claro (tokens TailAdmin sin dark mode) | ✅ |
 | API client con `VITE_API_URL`, interceptor de refresh en 401 | ✅ |
 | Docker dev (docker-compose.yml, Dockerfile, hot reload en :5173) | ✅ |
@@ -59,17 +59,82 @@ Especificación: `PROMPT.md` (Parte II — Pantalla pública con información de
 |---|---|
 | `npm run lint` | OK (0 errores) |
 | `npm run typecheck` (`tsc -b --noEmit`) | OK |
-| `npm run test` | 14/14 en verde (3 archivos) |
+| `npm run test` | 31/31 en verde (7 archivos) |
 | `npm run build` | OK (dist generado, Vite 6.4.3) |
 | `npm run dev` | Arranca en `http://localhost:5173/` |
+
+---
+
+## Iteración 2026-09-14 — Bugfix: índice público, admin scope y PROMPT
+
+### Problemas reportados
+
+| # | Síntoma | Causa raíz |
+|---|---------|-----------|
+| A | El índice `/` solo mostraba competiciones **asignadas al usuario** tras login | Las funciones de `src/api/public.ts` usaban `request()` con `auth: true` por defecto → se adjuntaba el JWT y el backend (`IsAuthenticatedOrReadOnly`) filtraba el queryset por usuario |
+| B | `/admin/events` mostraba "Sin eventos" (estado vacío) con competición asignada | `adminScopeStore.competitionId` iniciaba en `null`; `CompetitionScopeSelect` calculaba `effectiveId` pero nunca lo escribía en el store → las queries quedaban deshabilitadas (`enabled: Boolean(null)`) |
+| C | `/admin/teams` mostraba "Sin equipos" (mismo motivo que B) | Idéntico a B |
+| D | `PROMPT.md` no documentaba los endpoints de creación de eventos y equipos | Falta de especificación |
+
+### Cambios aplicados
+
+**1. `src/api/public.ts`** — Las 5 funciones de lectura pública ahora pasan `{ auth: false }` a `request()`: `getCompetitions`, `getCompetition`, `getCompetitionStages`, `getEvents`, `getLeaderboard`. Resultado: `/` y `/competitions/:slug/` muestran **todas las competiciones publicadas**, con o sin sesión.
+
+**2. `src/components/admin/CompetitionScopeSelect.tsx`** — Nuevo `useEffect` que auto-escribe `effectiveId` (primera competición disponible) en `adminScopeStore` cuando no hay selección válida previa. Resultado: `/admin/events` y `/admin/teams` cargan los datos de la competición asignada de inmediato, sin exigir interacción con el selector.
+
+**3. `PROMPT.md`** — Actualizado:
+- Sección 7: endpoints de escritura de **eventos** (POST `{competition_stage, event_number, name, workout, description, is_ascending, is_active}`) y **equipos** (POST `{name, competition}`), PATCH/DELETE/GET, y tabla de catálogos.
+- Sección 5: regla de negocio "el inicio siempre muestra todas las competiciones publicadas sin importar el login" y auto-selección del scope admin.
+- Sección 12: resoluciones documentadas (públicos sin token, admin scope) y decisión pendiente de backend mantenida.
+
+**4. `tests/publicApi.test.ts`** — Actualizado el test de `getLeaderboard` para esperar `{ auth: false }`, y añadidos tests que fijan que `getCompetitions`, `getCompetition` y `getCompetitionStages` nunca adjuntan auth. 29/29 tests.
+
+### Verificación contra escenarios
+
+| Escenario | Esperado |
+|-----------|----------|
+| `/` sin sesión | Muestra todas las competiciones publicadas |
+| `/` con sesión | Muestra las **mismas** competiciones (no filtradas por usuario) |
+| `/competitions/:slug/` sin sesión | Detalle completo (info, WODs, leaderboard) |
+| `/admin/events` sin selección previa | Auto-selecciona la primera competición y lista sus eventos |
+| `/admin/teams` sin selección previa | Auto-selecciona la primera competición y lista sus equipos |
+| Cambio de competición en selector | Refresca eventos/equipos de la competición elegida |
+| `/admin/*` sin sesión | Redirige a `/login` |
+
+---
+
+## Iteración 2026-09-14 — Bugfix: `/admin` solo competiciones asignadas
+
+### Problemas reportados
+1. `/admin/competitions` mostraba **todas** las competiciones (debía mostrar solo las asignadas al usuario).
+2. El select de eventos y equipos (`CompetitionScopeSelect`) también mostraba todas.
+
+### Causa raíz
+`fetchAdminCompetitions()` delegaba en `getCompetitions()` de `public.ts`, que tras el fix anterior pasa `{ auth: false }`. Al no adjuntar el JWT, el backend no filtraba por usuario asignado.
+
+### Cambios aplicados
+- **`src/api/admin.ts`**: `fetchAdminCompetitions()` ahora usa `fetchCatalog<Competition>("/competitions/?page_size=100")` → `request()` con `auth: true` (JWT adjunto). El backend devuelve solo las competiciones asignadas (todas para superusuario). Se eliminó el import de `getCompetitions` de `./public`.
+- **`tests/adminApi.test.ts`** (nuevo): fija que `fetchAdminCompetitions` no pasa `{ auth: false }` y que desempaqueta la página. Suite: **31/31**.
+
+### Verificación contra escenarios
+
+| Escenario | Esperado |
+|-----------|----------|
+| `/admin/competitions` (admin de competición) | Solo competiciones asignadas |
+| `/admin/competitions` (superusuario) | Todas las competiciones |
+| Select de eventos/equipos | Solo competiciones asignadas al usuario |
+| `/` público | Sigue mostrando todas las publicadas (sin token) |
+
+---
 
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
 - [x] lint sin errores
 - [x] typecheck sin errores
-- [x] suite de tests en verde (frontend 14/14; backend 94/94)
+- [x] suite de tests en verde (frontend 31/31)
 - [x] `/` renderiza recientes + pestaña "todas" (con backend disponible/público)
+- [x] `/` muestra **todas las competiciones publicadas** con sesión activa o no (2026-09-14)
 - [x] detalle muestra info, afiliación, fechas, mapa, WODs y leaderboard
 - [x] URLs por slug (`/competitions/{slug}/`), backend resuelve slug e id; slug inválido → 404
 - [x] filtros de leaderboard (etapa/categoría)

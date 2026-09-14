@@ -38,12 +38,13 @@ export async function getCompetitions(
   const query = buildQuery(params as QueryParams);
   const data = await request<Competition[] | Page<Competition>>(
     `/competitions/${query}`,
+    { auth: false },
   );
   return unwrapList(data);
 }
 
 export async function getCompetition(id: number | string): Promise<Competition> {
-  return request<Competition>(`/competitions/${id}/`);
+  return request<Competition>(`/competitions/${id}/`, { auth: false });
 }
 
 export async function getCompetitionStages(
@@ -51,6 +52,7 @@ export async function getCompetitionStages(
 ): Promise<CompetitionStage[]> {
   const data = await request<unknown>(
     `/competition-stages/${buildQuery({ competition: competitionId })}`,
+    { auth: false },
   );
   return normalizeStages(data);
 }
@@ -92,6 +94,7 @@ function normalizeStages(data: unknown): CompetitionStage[] {
 export async function getEvents(stageId: number | string): Promise<EventWod[]> {
   const data = await request<EventWod[] | Page<EventWod>>(
     `/events/${buildQuery({ competition_stage: stageId })}`,
+    { auth: false },
   );
   return unwrapList(data);
 }
@@ -150,6 +153,7 @@ export async function getLeaderboard(
   try {
     data = await request<unknown>(
       `/leaderboards/competition/${competitionId}/${stage}/`,
+      { auth: false },
     );
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {

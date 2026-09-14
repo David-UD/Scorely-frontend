@@ -1,270 +1,288 @@
-# PLAN — Implementación del PROMPT.md (Vistas públicas de Scorely)
+# PLAN — Corrección de bugs y actualización del PROMPT.md
 
-> Documento de planificación. **No ejecuta cambios**: describe, paso a paso, cómo implementar la
-> actualización especificada en `PROMPT.md` (Parte II), para ser ejecutada en una sesión posterior.
-> Estado: **BORRADOR / pendiente de revisión**.
-
----
-
-## 0. Resumen del objetivo
-
-Poner a disposición del público (sin login) la información de las competiciones de **Scorely**:
-
-- **`/`** — Inicio público: competiciones recientes (por `start_date` desc) con pestaña a "todas las competiciones".
-- **`/competitions/:id/`** — Detalle público: información general (nombre, afiliación dueña/creadora, fechas),
-  mapa (embed OpenStreetMap), status, WODs por etapa y leaderboards (qualifier/final) con filtros.
-- El panel `/admin` **no cambia** en esta iteración y sigue protegido por rol (JWT).
-
-Restricciones clave heredadas del PROMPT:
-- **NO tocar el backend** (ni endpoints, ni mockear en producción).
-- **NO tocar el clon de referencia** (`free-react-tailwind-admin-dashboard/`), solo lectura.
-- No crear ramas, no push, no git sin pedido explícito. Documentar en `Process.md`.
+> **No ejecuta cambios**: describe, paso a paso, cómo implementar las correcciones
+> solicitadas por el usuario sobre el proyecto ya existente `Scorely-frontend/`.
+>
+> Fecha: 2026-09-14
+> Estado: **BORRADOR / pendiente de ejecución**
 
 ---
 
-## 1. Estado actual verificado
+## 0. Resumen de los problemas a resolver
 
-| Elemento | Estado |
-|---|---|
-| `PROMPT.md` | Presente (spec Parte II completada) |
-| Clon referencia TailAdmin | `free-react-tailwind-admin-dashboard/` (MIT, React 19, Tailwind v4, Vite 6, TS 5.7, router `react-router` 7.1) |
-| Proyecto `frontend/` | **NO existe aún** → hay que crearlo desde cero |
-| `Process.md` / `RESULTADOS.md` | **NO existen** → crear en el Paso 1 |
-| `.env` / `VITE_API_URL` | No configurado → definir al crear el proyecto |
-| Repositorio git | No es repo git en el directorio raíz (no hacer operaciones git sin pedido) |
-
-Observaciones sobre el clon (usado solo como referencia visual/código):
-- Layout admin: `src/layout/AppLayout.tsx`, `AppHeader.tsx`, `AppSidebar.tsx`.
-- Paleta/tema (light+dark): definida vía `@theme` en `src/index.css` (tokens `brand`, `gray`, `success`, `error`, etc.).
-- Login: `src/pages/AuthPages/SignIn.tsx`; componentes: `src/components/common/*`, `src/components/ui/*`, `src/components/tables/*`.
-- El proyecto Scorely usará **tema claro** (sin dark mode por ahora) y solo replicará lo que necesite.
+| # | Problema | Archivos afectados |
+|---|----------|--------------------|
+| A | El índice `/` solo muestra competiciones **asignadas al usuario** después de login. Debería mostrar **todas las competiciones publicadas** sin importar el estado de autenticación. | `src/api/public.ts` (5 funciones) |
+| B | `/admin/events` muestra **"Sin eventos"** (estado vacío) aun teniendo una competición asignada. Las queries nunca se ejecutan porque `competitionId` es `null` en el store. | `src/components/admin/CompetitionScopeSelect.tsx` |
+| C | `/admin/teams` muestra **"Sin equipos"** (mismo motivo que B). | `src/components/admin/CompetitionScopeSelect.tsx` |
+| D | `PROMPT.md` no documenta los endpoints de **creación** de eventos y equipos. | `PROMPT.md` |
 
 ---
 
-## 2. Decisiones/preguntas a resolver ANTES de implementar
+## 1. Análisis de causa raíz
 
-> Estas ambigüedades del `PROMPT.md` deben confirmarse con el usuario antes del Paso 1. Sin resolverlas, la implementación puede resultar en un trabajo inválido.
+### Problema A — Índice filtra por usuario autenticado
 
-1. **[DECISIÓN PENDIENTE §12]** Los endpoints `competitions`, `competition-stages` y `events` requieren JWT en el backend (solo `leaderboards` es `AllowAny`). Opciones:
-   - (a) El backend abrirá esos GET al público → implementar vistas públicas sin login (recomendado por la spec).
-   - (b) Se mantiene JWT → las vistas públicas exigirían login (contradice el objetivo). **No implementar la iteración hasta decidir**.
-   - Hasta entonces la spec asume acceso con JWT. **Preguntar al usuario** qué backend hay disponible para probar.
-2. **Rutas por `id` vs `slug`**: el API referencia competiciones por `id` (el `slug` no es lookup del API).
-   → La propuesta usa `/competitions/:id/`. Confirmar o solicitar cambio de lookup en backend (NO lo hacemos nosotros).
-3. **Estados públicos de competición visibles**: la spec sugiere que el público vea solo `PUBLISHED`/`FINISHED` (no `DRAFT`/`CANCELLED`). Confirmar si el backend ya filtra o si hay que filtrar en frontend.
-4. **Convenciones `[COMPLETAR]` de la Parte I**: nombres (PascalCase/kebab), exports (default vs named), manejo de carga/error estándar, responsive objetivo (móvil/tablet/desktop). **No asumir**: verificar en el código del clon y acordar.
-5. **URL base del API real** para pruebas manuales (`VITE_API_URL`): pedir al usuario.
-6. **Wireframe/maqueta de las páginas públicas** (la sección 4 está sin completar): ¿existe diseño o se procede con el estilo TailAdmin adaptado?
+**Causa**: Todas las funciones de `src/api/public.ts` (`getCompetitions`, `getCompetition`, `getCompetitionStages`, `getEvents`, `getLeaderboard`) llaman a `request()` con la opción `auth` en su valor por defecto (`true`, ver `src/api/client.ts:70`). Esto significa que, si el usuario tiene un JWT en `authStore`, el token se adjunta a la petición. El backend, con el permiso `IsAuthenticatedOrReadOnly`, aplica un `get_queryset()` que filtra competiciones por usuario autenticado → solo devuelve las asignadas al usuario. Para requests anónimos (sin token), el backend devuelve todas las competiciones publicadas.
+
+**Solución**: Las páginas públicas (`/` y `/competitions/:slug/`) deben llamar a los endpoints de lectura **sin** adjuntar el token. Se modifica cada función de `public.ts` para pasar `auth: false` explícitamente a `request()`.
+
+### Problemas B y C — Admin scope nunca se auto-selecciona
+
+**Causa**: El `adminScopeStore` (`src/store/adminScopeStore.ts`) inicializa `competitionId: null`. El componente `CompetitionScopeSelect` (`src/components/admin/CompetitionScopeSelect.tsx`) calcula un `effectiveId` (línea 16-22) que cae en la primera competición de la lista si no hay selección válida, pero **nunca lo escribe en el store**. Solo lo usa como `value` del `<select>`. Resultado:
+
+1. `competitionId` permanece `null` en Zustand
+2. `useAdminEvents(null)` → `enabled: Boolean(null)` → `false` → query no se ejecuta
+3. `useAdminTeams(null)` → `enabled: Boolean(null)` → `false` → query no se ejecuta
+4. La UI muestra "Sin eventos" / "Sin equipos" (EmptyState)
+
+**Solución**: Añadir un `useEffect` en `CompetitionScopeSelect` que, al montarse con `competitionId === null` y competiciones disponibles, escriba el `effectiveId` en el store automáticamente. Esto activa las queries de eventos y equipos de inmediato.
+
+### Problema D — PROMPT.md incompleto sobre endpoints de creación
+
+**Causa**: La sección 7 del `PROMPT.md` solo documenta endpoints de lectura. Faltan los endpoints de escritura (POST) para eventos y equipos, necesarios para el CRUD del panel admin.
+
+**Solución**: Añadir a la sección 7 del `PROMPT.md` los endpoints de creación, actualización y eliminación de eventos y equipos, con sus payloads documentados.
 
 ---
 
-## 3. Stack y dependencias a instalar (en `frontend/`)
+## 2. Archivos a modificar (resumen)
 
-Mirrors de lo ya usado por el clon + lo fijado en la Parte I:
+| Archivo | Cambio | Severidad |
+|---------|--------|-----------|
+| `src/api/public.ts` | Añadir `auth: false` a las 5 funciones de lectura pública | Alta |
+| `src/components/admin/CompetitionScopeSelect.tsx` | Auto-seleccionar primera competición en `competitionId` nulo | Alta |
+| `PROMPT.md` | Documentar endpoints de creación para eventos y equipos | Media |
 
-| Dependencia | Versión sugerida | Nota |
-|---|---|---|
-| `react` / `react-dom` | ^19.x | igual que clon |
-| `react-router-dom` | ^6.x (v6) o ^7 como clon | Parte I dice **v6**; clon usa 7.1 → confirmar en Paso «config». |
-| `zustand` | ^5.x | estado global |
-| `@tanstack/react-query` | ^5.x | data fetching |
-| `react-hook-form` + `zod` + `@hookform/resolvers` | ^7.x / ^3.x | formularios (login) |
-| `tailwindcss` + `@tailwindcss/vite` (o postcss) | ^4.x | Tailwind v4, tema claro |
-| `typescript` | ~5.7.x | igual que clon |
-| `vite` | ^6.x | igual que clon |
-| `@vitejs/plugin-react`, `vite-plugin-svgr` | igual que clon | son necesarios para SVG |
-| `vitest` + `@testing-library/react` + `@testing-library/jest-dom` + `jsdom` | ^3.x / ^16.x | tests unitarios |
-| `@playwright/test` | ^1.x | e2e (opcional en esta iteración) |
-| `eslint` + `typescript-eslint` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` | igual que clon | lint |
-| `clsx` / `tailwind-merge` | ^2.x / ^3.x | utilidades de clases |
+---
 
-No se instalan: Highcharts, ls bonos de TailAdmin "Pro", ni librerías comerciales. Mapas: **OSM embed (iframe)** sin librería; no usar `@react-jvectormap`.
+## 3. Plan paso a paso
 
-**Scripts a configurar en `package.json`** (plantilla):
-```bash
-npm run dev        # vite
-npm run build      # tsc -b && vite build
-npm run lint       # eslint .
-npm run test       # vitest run
-npm run test:watch # vitest
-npm run typecheck  # tsc -b --noEmit  (o npx tsc --noEmit)
-npm run preview    # vite preview
+### Paso 1 — Corregir endpoints públicos para no enviar token
+
+**Archivo**: `src/api/public.ts`
+
+**Qué hacer**: En cada función que realiza una petición de lectura pública, pasar `{ auth: false }` como segundo argumento de `request()`. Esto garantiza que el JWT **nunca** se adjunte en páginas públicas, independientemente de si el usuario tiene sesión activa.
+
+Funciones a modificar:
+
+1. `getCompetitions` (línea 39): `request(..., { auth: false })`
+2. `getCompetition` (línea 46): `request(..., { auth: false })`
+3. `getCompetitionStages` (línea 52): `request(..., { auth: false })`
+4. `getEvents` (línea 93): `request(..., { auth: false })`
+5. `getLeaderboard` (línea 151): `request(..., { auth: false })`
+
+**Código antes** (ejemplo de `getCompetitions`):
+```typescript
+const data = await request<Competition[] | Page<Competition>>(
+  `/competitions/${query}`,
+);
 ```
 
----
-
-## 4. Estructura de carpetas a crear (en `frontend/`)
-
-```
-frontend/
-├── .env                      # VITE_API_URL (no commitear valores reales)
-├── .env.example
-├── package.json / tsconfig*.json / vite.config.ts / eslint.config.js
-├── index.html
-├── public/
-├── src/
-│   ├── main.tsx / App.tsx
-│   ├── index.css             # tema claro + tokens base (replicados de TailAdmin, sin dark)
-│   ├── api/                  # cliente HTTP + interceptor refresh + endpoints
-│   │   ├── client.ts
-│   │   ├── auth.ts
-│   │   └── public.ts         # competitions, stages, events, leaderboards
-│   ├── types/                # DTOs (Competition, Stage, Event, Leaderboard…)
-│   ├── store/                # Zustand: authStore (token, usuario, rol)
-│   ├── hooks/                # queries TanStack (useCompetitions, useCompetition, …)
-│   ├── components/
-│   │   ├── common/           # Badge, Spinner, ErrorState, EmptyState, Tabs
-│   │   ├── public/           # CompetitionCard, WodList, LocationMap, LeaderboardTable, LeaderboardFilters
-│   │   └── admin/            # (reservado, no en esta iteración)
-│   ├── layout/
-│   │   ├── PublicLayout.tsx  # header/footer públicos (a medida)
-│   │   └── AdminLayout.tsx   # replica de AppLayout (reservado para /admin)
-│   ├── guards/
-│   │   ├── RoleGuard.tsx     # protege /admin/* (redirige a login)
-│   │   └── PublicOnly.tsx    # (opcional)
-│   ├── pages/
-│   │   ├── public/
-│   │   │   ├── HomeIndex.tsx          # /
-│   │   │   └── CompetitionDetail.tsx  # /competitions/:id/
-│   │   ├── auth/
-│   │   │   └── LoginPage.tsx          # /login (replicado de SignIn, tem claro)
-│   │   └── admin/            # (reservado)
-│   └── utils/                # formatters (fechas, puntuación), cn()
-├── tests/                    # tests unitarios + e2e (opcional)
-├── Process.md                # registro de avances (obligatorio por PROMPT)
-└── RESULTADOS.md             # resultado y verificaciones al finalizar
+**Código después**:
+```typescript
+const data = await request<Competition[] | Page<Competition>>(
+  `/competitions/${query}`,
+  { auth: false },
+);
 ```
 
-> Regla: NO escribir nada dentro de `free-react-tailwind-admin-dashboard/`. Todo el código propio vive en `frontend/`.
+**Verificación**:
+- El índice `/` debe mostrar todas las competiciones publicadas tanto con sesión como sin ella.
+- El detalle `/competitions/:slug/` debe cargar la información sin token.
+- Los leaderboards (ya `AllowAny` en backend) siguen funcionando igual.
+
+**Riesgo**: Si el backend **no** devuelve competiciones a usuarios anónimos (permiso distinto al documentado), el índice mostrará vacío. En ese caso, el usuario debe ajustar los permisos del backend (no mockear en frontend).
 
 ---
 
-## 5. Plan paso a paso
+### Paso 2 — Auto-seleccionar competición en admin scope
 
-### Paso 1 — Preparación y scaffolding
-- [ ] Crear `Process.md` y registrar inicio.
-- [ ] Resolver con el usuario las preguntas de la sección 2 (endpoints públicos, id vs slug, VITE_API_URL, convenciones, maqueta).
-- [ ] Crear proyecto base: `npm create vite@latest frontend -- --template react-ts` (React 19 + TS), en el directorio raíz.
-- [ ] Instalar dependencias del stack (sección 3) y Tailwind v4 (`@tailwindcss/vite` o postcss).
-- [ ] Configurar `vite.config.ts` (plugin react, svgr, alias `@/` → `./src`, configuración vitest), `tsconfig` con paths, `eslint.config.js`.
-- [ ] Crear `index.css` con **tema claro**: copiar del clon solo los tokens `@theme` de colores/typografía/breakpoints/shadow (sin `@custom-variant dark`, sin estilos dark de terceros). Añadir base: `body { @apply font-outfit bg-gray-50 text-gray-900; }`.
-- [ ] Configurar scripts en `package.json`.
-- [ ] Crear `.env` / `.env.example` con `VITE_API_URL` (valor solicitado al usuario).
+**Archivo**: `src/components/admin/CompetitionScopeSelect.tsx`
 
-### Paso 2 — Tipos/DTOs y cliente API
-- [ ] `src/types/`: definir `Competition`, `Affiliation`, `Location`, `CompetitionStage`, `Event` (WOD), `Leaderboard`, `LeaderboardEntry`, `CategoryCode`… conforme a la sección 6 del PROMPT. No asumir campos: validar contra la respuesta real del backend/OpenAPI.
-- [ ] `src/api/client.ts`: `fetch` wrapper con base URL de `import.meta.env.VITE_API_URL`, `Content-Type: application/json`, manejo de errores tipados, y opcional `Authorization: Bearer` cuando exista token.
-- [ ] `src/api/auth.ts` (si aplica esta iteración): login/refresh endoints JWT (`POST /api/v1/auth/token/`, `.../refresh/`), interceptor que ante **HTTP 401** hace refresh y reintenta; si refresh falla → `authStore.clear()` + redirect a `/login`.
-- [ ] `src/api/public.ts`: endpoints de lectura (ver tabla de la sección 6 de este plan).
-- [ ] `src/store/authStore.ts`: Zustand — `token`, `refreshToken`, `user`, `role`, `login/logout`.
+**Qué hacer**: Añadir un `useEffect` que, cuando `competitionId` en el store sea `null` (o no exista en la lista de competiciones) y haya competiciones disponibles, escriba el `effectiveId` (primera competición) en el store.
 
-### Paso 3 — Routing y guards
-- [ ] `src/App.tsx` con `BrowserRouter`, `ScrollToTop`.
-- [ ] Rutas públicas (sin auth):
-  - `/` → `HomeIndex`
-  - `/competitions/:id/` → `CompetitionDetail`
-- [ ] Rutas de auth: `/login` → `LoginPage`.
-- [ ] Rutas admin (placeholder por ahora, protegidas): `/admin/*` dentro de `AdminLayout` + `RoleGuard` que redirige a `/login` sin sesión.
-- [ ] `404` → página pública de "no encontrado" (estilo TailAdmin adaptado, tema claro).
-- [ ] `<RoleGuard>` lee de `authStore`; sin token → `<Navigate to="/login" replace />`.
+**Código a añadir** (después del `useMemo` existente):
+```typescript
+useEffect(() => {
+  if (effectiveId && effectiveId !== competitionId) {
+    setCompetitionId(effectiveId);
+  }
+}, [effectiveId, competitionId, setCompetitionId]);
+```
 
-### Paso 4 — Hooks de data fetching (TanStack Query)
-- [ ] `QueryClientProvider` en `main.tsx` (config global: retries, staleTime, error handling).
-- [ ] Hooks `useCompetitions(params)`, `useCompetition(id)`, `useCompetitionStages(competitionId)`, `useEvents(stageId)`, `useLeaderboard(competitionId, stage)`.
-- [ ] Estados estándar: `isLoading`/`isError`/`data`; exportar objetos de error tipados.
+**Importación necesaria**: Añadir `useEffect` al import de `react` (línea 1).
 
-### Paso 5 — Componentes comunes públicos (a medida, Tailwind claro)
-- [ ] `Tabs` (Recientes / Todas + manejo de activo).
-- [ ] `Badge` / `StatusBadge` (mapeo código→`label` en español, colores por estado: PUBLISHED, FINISHED, DRAFT, CANCELLED, UPCOMING…; **solo PUBLISHED/FINISHED visibles al público** según decisión de la sección 2).
-- [ ] `Spinner` (loading), `ErrorState` (mensaje + reintentar), `EmptyState` (sin WODs / sin leaderboard / sin competiciones *sin romper la página*).
-- [ ] `CompetitionCard` (tarjeta: nombre, afiliación, fechas, tipo, status; enlaza a detalle). Densidad: tarjetas para listado.
-- [ ] `LocationMap` (iframe OSM embed: `https://www.openstreetmap.org/export/embed.html?bbox=...&marker=lat,lon`) a partir de `Location.latitude/longitude`; si no hay coords → estado "sin mapa" (EmptyState). **Sin API key**.
+**Por qué funciona**:
+1. Al montar, `competitionsQuery` carga la lista de competiciones.
+2. `effectiveId` se calcula con la primera competición.
+3. El `useEffect` detecta que `competitionId === null` y escribe el `effectiveId` en el store.
+4. Las queries `useAdminEvents(competitionId)` y `useAdminTeams(competitionId)` ahora tienen `enabled: true`.
+5. Los datos se cargan y la UI muestra eventos/equipos en lugar de EmptyState.
 
-### Paso 6 — Página de inicio pública (`/`)
-- [ ] `HomeIndex`: header público (logo/nombre Scorely, enlace al detalle si procede), sección hero opcional.
-- [ ] Tabs: **Recientes** (default; ordenadas por `start_date` desc) / **Todas** (listado completo).
-- [ ] Filtros de lista (opcional): tipo de competición (`competition_type`), búsqueda por nombre, estado — usando los query params que soporta el endpoint (no inventar).
-- [ ] Grid responsive de `CompetitionCard` (móvil/tablet/desktop).
-- [ ] Estados: carga (spinner/skeleton), error (reintentar), vacío (sin competiciones).
-- [ ] Navegación tarjeta → `/competitions/:id/`.
+**Verificación**:
+- Al entrar a `/admin/events` sin selección previa, se auto-selecciona la primera competición y se muestran sus eventos.
+- Al entrar a `/admin/teams` sin selección previa, se auto-selecciona la primera competición y se muestran sus equipos.
+- Cambiar de competición en el selector actualiza los datos correctamente.
+- Si el usuario ya tenía una competición seleccionada (persistida en localStorage), se mantiene esa selección.
 
-### Paso 7 — Detalle público de competición (`/competitions/:id/`)
-- [ ] `CompetitionDetail`: carga de competición + stages + eventos + leaderboards.
-- [ ] Cabecera: nombre, `StatusBadge`, fechas (`start_date`→`end_date`), tipo de competición, equipo.
-- [ ] Afiliación **dueño/creador**: nombre + ciudad/estado/país (bloque destacado).
-- [ ] Mapa: `LocationMap` (dato de `location`).
-- [ ] **WODs** por etapa: sección agrupada por `CompetitionStage` (Qualifier/Final, según `competition_stage`), listado tipo tabla con `event_number`, `name`, `description`, `event_result_type`, `rank_direction`.
-- [ ] **Leaderboards**: pestañas Qualifier / Final + `LeaderboardFilters` (categorías disponibles según payload) + `LeaderboardTable` (rank, participante, `final_score`, `event_ranks[]`).
-- [ ] Estados: competición sin WODs/sin leaderboard/sin datos → `EmptyState` claro; competición `DRAFT`/`CANCELLED` → visible solo si la decisión de la sección 2 lo permite.
-
-### Paso 8 — Login mínimo y protección de `/admin`
-- [ ] `LoginPage` replicada del `SignIn` del clon (tema claro, español): `react-hook-form` + `zod`.
-- [ ] Al autenticar: guardar tokens/rol en `authStore`; redirigir a `/admin` o a `location.state` original.
-- [ ] Verificar que `/admin/*` sin sesión → redirección a `/login`.
-- [ ] (Sin CRUD admin en esta iteración: solo rutas placeholder protegidas.)
-
-### Paso 9 — Pruebas
-- [ ] Configurar Vitest + RTL + jsdom (setup global con jest-dom).
-- [ ] Tests unitarios/componentes por escenario de la sección 10 del PROMPT:
-  - HomeIndex sin sesión: renderiza recientes + pestaña "todas".
-  - Detalle: información, afiliación, fechas, mapa, WODs, leaderboard.
-  - Filtros de leaderboard (etapa/categoría) se reflejan en la tabla.
-  - RoleGuard: sin token → redirige a login.
-  - Estados vacíos: competición sin WODs/leaderboard no rompe la página.
-- [ ] (Opcional) E2E con Playwright: flujo `/` → detalle → filtro leaderboard.
-- [ ] Verificación manual contra el backend real (si el usuario lo provee y una vez resuelta la decisión de acceso JWT/público de la sección 2). Si el backend no está disponible → documentar el mock **temporal** para dev y marcarlo claramente (no mockear en producción).
-
-### Paso 10 — Verificación final (criterios de aceptación del PROMPT, §11)
-- [ ] `npm run build` sin errores.
-- [ ] `npm run lint` sin errores.
-- [ ] `npm run typecheck` sin errores.
-- [ ] Suite de tests en verde (`npm run test`).
-- [ ] `/` consultable sin login: muestra recientes + todas.
-- [ ] Detalle muestra info general, afiliación dueño/creador, fechas, mapa, WODs y leaderboard.
-- [ ] Filtros de leaderboard (etapa/categoría) funcionan.
-- [ ] `/admin/*` protegido (redirige a login sin sesión).
-- [ ] Solo español, tema claro.
-- [ ] Confirmar que **no se tocó el backend** ni `free-react-tailwind-admin-dashboard/`.
-
-### Paso 11 — Documentación y cierre
-- [ ] Actualizar `Process.md` con avances al iniciar/finalizar cada paso.
-- [ ] Escribir `RESULTADOS.md`: resumen de lo implementado, verificaciones ejecutadas, pasos manuales pendientes del usuario (p.ej. decidir el tema de endpoints públicos, proveer `VITE_API_URL`, pruebas contra backend real).
-- [ ] Reportar resumen final al usuario (qué se cambió, cómo se verificó, pasos manuales restantes).
-- [ ] NO hacer git operations (no ramas, no push, no commit) salvo pedido explícito.
+**Nota**: El `useEffect` no sobreescribe una selección válida del usuario. Solo actúa cuando `effectiveId !== competitionId` (incluye el caso de `null`).
 
 ---
 
-## 6. Endpoints del API a consumir (solo lectura)
+### Paso 3 — Actualizar PROMPT.md con endpoints de creación
+
+**Archivo**: `PROMPT.md`
+
+**Qué hacer**: Añadir a la **sección 7** (Endpoints del API utilizados) los endpoints de escritura para eventos y equipos, con sus métodos, URLs y payloads.
+
+**Endpoints a documentar**:
+
+#### Eventos
+
+| Acción | Método | URL | Auth | Payload |
+|--------|--------|-----|------|---------|
+| Crear evento | POST | `/api/v1/events/` | JWT | `{ competition_stage: number, event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
+| Actualizar evento | PATCH | `/api/v1/events/{id}/` | JWT | Mismo payload (campos parciales) |
+| Eliminar evento | DELETE | `/api/v1/events/{id}/` | JWT | — |
+| Obtener evento | GET | `/api/v1/events/{id}/` | JWT | — |
+
+**Nota sobre `competition_stage`**: El evento se asocia a una **etapa** (stage), no directamente a una competición. Para crear un evento, primero se debe obtener la etapa de la competición (`GET /api/v1/competition-stages/?competition={id}`) y luego usar su `id` como `competition_stage` en el payload.
+
+#### Equipos
+
+| Acción | Método | URL | Auth | Payload |
+|--------|--------|-----|------|---------|
+| Crear equipo | POST | `/api/v1/teams/` | JWT | `{ name: string, competition: number }` |
+| Actualizar equipo | PATCH | `/api/v1/teams/{id}/` | JWT | `{ name?: string }` |
+| Eliminar equipo | DELETE | `/api/v1/teams/{id}/` | JWT | — |
+| Obtener equipo | GET | `/api/v1/teams/{id}/` | JWT | — |
+
+**Nota sobre `competition`**: El equipo se asocia directamente a una **competición** por su `id`.
+
+#### Catálogos
 
 | Acción | Método | URL | Auth |
-|---|---|---|---|
-| Listar competiciones | GET | `/api/v1/competitions/` | Pública (pendiente decisión) |
-| Detalle competición | GET | `/api/v1/competitions/{id}/` | Pública (pendiente decisión) |
-| Stages de una competición | GET | `/api/v1/competition-stages/?competition={id}` | Pública (pendiente decisión) |
-| Eventos/WODs de un stage | GET | `/api/v1/events/?competition_stage={id}` | Pública (pendiente decisión) |
-| Leaderboard qualifier | GET | `/api/v1/leaderboards/competition/{id}/qualifier/` | **Pública (AllowAny)** |
-| Leaderboard final | GET | `/api/v1/leaderboards/competition/{id}/final/` | **Pública (AllowAny)** |
+|--------|--------|-----|------|
+| Tipos de competición | GET | `/api/v1/competition-types/` | JWT |
+| Estados de competición | GET | `/api/v1/status-competitions/` | JWT |
+| Filiações | GET | `/api/v1/affiliations/` | JWT |
+| Sedes/Locations | GET | `/api/v1/locations/` | JWT |
 
-> Si alguno de los endpoints "pendiente" no se abre al público, **avisar al usuario** (no mockear silenciosamente en producción). Los filtros/búsqueda deben usar únicamente los query params que el backend soporta (`competition_type`, `status`, `search` por nombre, según §7 del PROMPT).
+**Formato de la tabla en el PROMPT.md**: mantener el mismo formato de tabla existente (columnas: Acción, Método, URL, Auth, Notas).
 
 ---
 
-## 7. Riesgos / puntos de atención
+### Paso 4 — Actualizar Process.md con los cambios
 
-1. **Decisión pendiente de acceso público** (§12 PROMPT): bloquea la validación real de `/` y el detalle sin login. Mitigación: implementar contra el contrato documentado y verificar con JWT hasta que el usuario resuelva.
-2. **`VITE_API_URL`**: sin un valor real no hay verificación manual; pedirlo antes del Paso 1.
-3. **Rutas por `id`**: si el backend cambia a lookup por `slug` se ajustan rutas. Notificarlo al usuario (cambio backend — no lo hacemos).
-4. **Mapa**: OSM embed requiere lat/lon válidos; coordinar comportamiento sin coordenadas (EmptyState).
-5. **Dependencias**: evitar librerías fuera del stack definido (regla Parte I). Preguntar antes de añadir.
-6. **Clon TailAdmin**: verificar que ninguna herramienta/paso toque `free-react-tailwind-admin-dashboard/`.
+**Archivo**: `Process.md`
+
+**Qué hacer**: Añadir un nuevo paso (Paso 16) documentando:
+- Los 3 problemas detectados (índice filtrado por auth, admin scope sin auto-selección, PROMPT.md incompleto)
+- Las soluciones aplicadas
+- Los archivos modificados
+- Los resultados de verificación (lint, typecheck, tests, build)
 
 ---
 
-## 8. Éxito / definición de "done"
+### Paso 5 — Verificación final
 
-Se considera completado cuando:
-- Todos los checks del Paso 10 estén verdes.
-- Las páginas públicas funcionen contra el backend real (o con mock temporal documentado si el backend no está accesible).
-- `Process.md` y `RESULTADOS.md` estén actualizados.
-- No se haya modificado ni el backend ni el clon de referencia.
-- Las decisiones de la sección 2 queden registradas en `RESULTADOS.md` (incl. la pendiente de endpoints públicos).
+Ejecutar en orden:
+1. `npm run lint` → sin errores
+2. `npm run typecheck` → sin errores
+3. `npm run test` → todos los tests en verde
+4. `npm run build` → OK (dist generado)
+
+**Escenarios manuales a verificar** (si el backend está disponible):
+
+| Escenario | Esperado |
+|-----------|----------|
+| `/` sin sesión | Muestra todas las competiciones publicadas |
+| `/` con sesión | Muestra las **mismas** competiciones (no filtradas por usuario) |
+| `/competitions/:slug/` sin sesión | Detalle completo (info, WODs, leaderboard) |
+| `/admin/events` sin selección previa | Auto-selecciona primera competición y muestra sus eventos |
+| `/admin/teams` sin selección previa | Auto-selecciona primera competición y muestra sus equipos |
+| `/admin/events` cambiando selector | Actualiza la lista de eventos de la competición elegida |
+| `/admin/teams` cambiando selector | Actualiza la lista de equipos de la competición elegida |
+| `/admin/*` sin sesión | Redirige a `/login` |
+
+---
+
+## 4. Análisis de endpoints para creación de eventos y equipos
+
+### Creación de eventos
+
+**Endpoint**: `POST /api/v1/events/`
+
+**Payload requerido**:
+```json
+{
+  "competition_stage": 1,       // ID de la etapa (obligatorio)
+  "event_number": 1,            // Número del evento dentro de la etapa (obligatorio, >= 1)
+  "name": "Fran",               // Nombre del WOD (obligatorio)
+  "workout": "21-15-9...",      // Descripción del workout (obligatorio)
+  "description": "Opcional...",  // Descripción adicional (opcional)
+  "is_ascending": false,         // Si las repeticiones suben (obligatorio)
+  "is_active": true              // Si el evento está activo (obligatorio)
+}
+```
+
+**Campos del formulario** (`EventFormPage.tsx`):
+- `competition_stage`: select de etapas (cargadas de `GET /competition-stages/?competition={id}`)
+- `event_number`: input numérico (mínimo 1)
+- `name`: input texto
+- `workout`: textarea
+- `description`: textarea (opcional)
+- `is_ascending`: checkbox
+- `is_active`: checkbox
+
+**Flujo de creación**:
+1. Usuario selecciona competición en `CompetitionScopeSelect`
+2. Se cargan las etapas de esa competición (`fetchStages(competitionId)`)
+3. Usuario completa el formulario y selecciona una etapa
+4. Se envía `POST /events/` con el payload
+5. Se invalida la query `["admin", "events", competitionId]` para refrescar la lista
+
+### Creación de equipos
+
+**Endpoint**: `POST /api/v1/teams/`
+
+**Payload requerido**:
+```json
+{
+  "name": "Team Alpha",    // Nombre del equipo (obligatorio)
+  "competition": 1          // ID de la competición (obligatorio)
+}
+```
+
+**Campos del formulario** (`TeamFormPage.tsx`):
+- `name`: input texto (obligatorio)
+- `competition`: se toma automáticamente de `adminScopeStore.competitionId`
+
+**Flujo de creación**:
+1. Usuario selecciona competición en `CompetitionScopeSelect`
+2. Usuario completa el nombre del equipo
+3. Se envía `POST /teams/` con `{ name, competition: scopeCompetitionId }`
+4. Se invalida la query `["admin", "teams", competitionId]` para refrescar la lista
+
+---
+
+## 5. Orden de ejecución recomendado
+
+1. **Paso 1** (`src/api/public.ts`) — Corrige el problema más visible (índice filtrado)
+2. **Paso 2** (`CompetitionScopeSelect.tsx`) — Corrige los admin vacíos
+3. **Paso 3** (`PROMPT.md`) — Documenta endpoints de creación
+4. **Paso 4** (`Process.md`) — Registra avances
+5. **Paso 5** — Verificación final
+
+Los pasos 1 y 2 son independientes (se pueden hacer en paralelo). El paso 3 es documentación pura. El paso 4 depende de los anteriores. El paso 5 es el cierre.
+
+---
+
+## 6. Restricciones que se mantienen
+
+- NO tocar el backend (ni endpoints, permisos ni migraciones).
+- NO tocar `free-react-tailwind-admin-dashboard/`.
+- NO crear ramas ni hacer push/commit.
+- NO mockear datos en producción.
+- Documentar avances en `Process.md`.

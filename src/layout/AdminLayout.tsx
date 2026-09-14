@@ -1,48 +1,36 @@
-import { Link, Outlet, useNavigate } from "react-router-dom";
-import { useAuthStore } from "@/store/authStore";
-import { logout } from "@/api/auth";
+import { Outlet } from "react-router-dom";
+import { SidebarProvider, useSidebar } from "@/components/admin/SidebarContext";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import AdminHeader from "@/components/admin/AdminHeader";
+import Backdrop from "@/components/admin/Backdrop";
 
-export default function AdminLayout() {
-  const user = useAuthStore((s) => s.user);
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
-  };
+function LayoutContent() {
+  const { isExpanded, isHovered, isMobileOpen } = useSidebar();
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
-        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-lg font-bold text-gray-900">
-              <span className="text-brand-500">S</span>corely
-            </Link>
-            <Link
-              to="/admin"
-              className="rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-100"
-            >
-              Panel
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              {user?.email ?? "Administrador"}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
-            >
-              Cerrar sesión
-            </button>
-          </div>
+    <div className="min-h-screen xl:flex">
+      <div>
+        <AdminSidebar />
+        <Backdrop />
+      </div>
+      <div
+        className={`flex-1 transition-all duration-300 ease-in-out ${
+          isExpanded || isHovered ? "lg:ml-[290px]" : "lg:ml-[90px]"
+        } ${isMobileOpen ? "ml-0" : ""}`}
+      >
+        <AdminHeader />
+        <div className="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <Outlet />
         </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <Outlet />
-      </main>
+      </div>
     </div>
+  );
+}
+
+export default function AdminLayout() {
+  return (
+    <SidebarProvider>
+      <LayoutContent />
+    </SidebarProvider>
   );
 }

@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getLeaderboard, getCompetitionStages } from "@/api/public";
+import {
+  getCompetitions,
+  getCompetition,
+  getLeaderboard,
+  getCompetitionStages,
+} from "@/api/public";
 import { request, ApiError } from "@/api/client";
 
-vi.mock("@/api/client", () => {
+vi.mock("@/api/client", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/client")>("@/api/client");
   class MockApiError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -12,8 +19,8 @@ vi.mock("@/api/client", () => {
     }
   }
   return {
+    ...actual,
     request: vi.fn(),
-    buildQuery: vi.fn(() => ""),
     ApiError: MockApiError,
   };
 });
@@ -43,6 +50,7 @@ describe("getLeaderboard", () => {
     const result = await getLeaderboard(8, "qualifier");
     expect(mockedRequest).toHaveBeenCalledWith(
       "/leaderboards/competition/8/qualifier/",
+      { auth: false },
     );
     expect(result).toHaveLength(1);
     expect(result[0].competition_id).toBe(8);
@@ -86,9 +94,33 @@ describe("getCompetitionStages", () => {
     mockedRequest.mockClear();
 
     const result = await getCompetitionStages(8);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competition-stages/?competition=8",
+      { auth: false },
+    );
     expect(result).toEqual([
       { id: 12, competition: 8, name: "", code: "qualifier" },
       { id: 13, competition: 8, name: "", code: "final" },
     ]);
+  });
+});
+
+describe("public read endpoints never attach the auth header", () => {
+  it("getCompetitions calls request without auth", async () => {
+    mockedRequest.mockResolvedValue({ results: [] });
+    await getCompetitions({ status: "published" });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      expect.stringContaining("/competitions/"),
+      { auth: false },
+    );
+  });
+
+  it("getCompetition calls request without auth", async () => {
+    mockedRequest.mockResolvedValue({ id: 8 });
+    await getCompetition(8);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitions/8/",
+      { auth: false },
+    );
   });
 });

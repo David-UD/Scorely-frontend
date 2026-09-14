@@ -10,6 +10,21 @@ export function formatDate(iso: string): string {
   });
 }
 
+export function formatBirthDate(iso?: string): string {
+  if (!iso) return "—";
+  return formatDate(iso);
+}
+
+export function stageLabel(stageType?: string): string {
+  if (!stageType) return "—";
+  const key = stageType.toLowerCase();
+  const labels: Record<string, string> = {
+    qualifier: "Qualifier",
+    final: "Final",
+  };
+  return labels[key] ?? stageType;
+}
+
 export function formatDateRange(startDate: string, endDate?: string): string {
   if (!startDate) return "";
   if (!endDate || endDate === startDate) return formatDate(startDate);

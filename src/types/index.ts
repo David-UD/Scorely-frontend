@@ -1,9 +1,11 @@
 export interface CompetitionType {
+  id?: number;
   code: string;
   name: string;
 }
 
 export interface CompetitionStatus {
+  id?: number;
   code: string;
   name: string;
 }
@@ -44,12 +46,27 @@ export interface Competition extends CompetitionSummary {
   location?: Location;
 }
 
+export interface CompetitionWritePayload {
+  id?: number;
+  name: string;
+  description?: string;
+  competition_type?: number;
+  status: number;
+  affiliation?: number;
+  location?: number;
+  start_date: string;
+  end_date?: string;
+  slug?: string;
+}
+
 export interface CompetitionStage {
   id: number;
   competition: number;
-  name: string;
+  name?: string;
   code?: string;
   stage_type?: string;
+  qualification_count?: number;
+  order?: number;
 }
 
 export interface EventWod {
@@ -61,6 +78,48 @@ export interface EventWod {
   description?: string;
   is_ascending: boolean;
   is_active: boolean;
+}
+
+export interface EventWritePayload {
+  id?: number;
+  competition_stage: number;
+  event_number: number;
+  name: string;
+  workout: string;
+  description?: string;
+  is_ascending: boolean;
+  is_active: boolean;
+}
+
+export interface Athlete {
+  id: number;
+  first_name: string;
+  last_name: string;
+  birth_date?: string;
+  gender?: string;
+  profile_photo?: string | null;
+  affiliation?: number | null;
+}
+
+export interface AthleteWritePayload {
+  id?: number;
+  first_name: string;
+  last_name: string;
+  birth_date?: string;
+  gender?: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  competition: number;
+  affiliation?: number | null;
+}
+
+export interface TeamWritePayload {
+  id?: number;
+  name: string;
+  competition: number;
 }
 
 export interface CategoryRef {
@@ -96,5 +155,8 @@ export interface AuthUser {
   id?: number;
   email?: string;
   role?: string;
+  first_name?: string;
+  last_name?: string;
+  is_superuser?: boolean;
   [key: string]: unknown;
 }
