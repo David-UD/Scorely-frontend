@@ -61,10 +61,31 @@ export interface CompetitionWritePayload {
 
 export type EventPhase = "QUALIFIER" | "FINAL";
 
+export interface CompetitionCategory {
+  id: number;
+  name: string;
+  min_members: number;
+  max_members: number;
+}
+
+export interface CompetitionCategoryWritePayload {
+  id?: number;
+  name: string;
+  min_members: number;
+  max_members: number;
+}
+
 export interface EnabledCompetitionCategory {
   id: number;
   competition: number;
-  competition_category: { id: number; code: string; name: string };
+  competition_category: number;
+  finalist_slots: number;
+}
+
+export interface EnabledCompetitionCategoryWritePayload {
+  id?: number;
+  competition: number;
+  competition_category: number;
   finalist_slots: number;
 }
 

@@ -1,13 +1,17 @@
 import { request } from "./client";
+import { useAuthStore } from "@/store/authStore";
 import type {
   Affiliation,
   Athlete,
   AthleteWritePayload,
   Competition,
+  CompetitionCategory,
+  CompetitionCategoryWritePayload,
   CompetitionStatus,
   CompetitionType,
   CompetitionWritePayload,
   EnabledCompetitionCategory,
+  EnabledCompetitionCategoryWritePayload,
   EventWod,
   EventWritePayload,
   Location,
@@ -33,6 +37,12 @@ async function fetchCatalog<T>(path: string): Promise<T[]> {
     return (data as Page<T>).results;
   }
   return [];
+}
+
+function assertSuperUser(): void {
+  if (!useAuthStore.getState().user?.is_superuser) {
+    throw new Error("No tenés permisos para administrar el catálogo de categorías.");
+  }
 }
 
 export async function getAdminCatalogs(): Promise<AdminCatalogs> {
@@ -71,7 +81,42 @@ export async function deleteCompetition(id: number): Promise<void> {
   await request<void>(`/competitions/${id}/`, { method: "DELETE" });
 }
 
-// ── Competition categories ───────────────────────────────────────────────────
+// ── Competition category catalog ────────────────────────────────────────────
+
+export async function fetchCompetitionCategories(): Promise<CompetitionCategory[]> {
+  return fetchCatalog<CompetitionCategory>("/competition-categories/?page_size=100");
+}
+
+export async function fetchCompetitionCategory(id: number): Promise<CompetitionCategory> {
+  return request<CompetitionCategory>(`/competition-categories/${id}/`);
+}
+
+export async function createCompetitionCategory(
+  payload: CompetitionCategoryWritePayload,
+): Promise<CompetitionCategory> {
+  assertSuperUser();
+  return request<CompetitionCategory>("/competition-categories/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCompetitionCategory(
+  payload: CompetitionCategoryWritePayload,
+): Promise<CompetitionCategory> {
+  assertSuperUser();
+  return request<CompetitionCategory>(`/competition-categories/${payload.id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCompetitionCategory(id: number): Promise<void> {
+  assertSuperUser();
+  await request<void>(`/competition-categories/${id}/`, { method: "DELETE" });
+}
+
+// ── Enabled competition categories ──────────────────────────────────────────
 
 export async function fetchEnabledCompetitionCategories(
   competitionId: number,
@@ -79,6 +124,28 @@ export async function fetchEnabledCompetitionCategories(
   return fetchCatalog<EnabledCompetitionCategory>(
     `/enabled-competition-categories/?competition=${competitionId}&page_size=100`,
   );
+}
+
+export async function createEnabledCompetitionCategory(
+  payload: EnabledCompetitionCategoryWritePayload,
+): Promise<EnabledCompetitionCategory> {
+  return request<EnabledCompetitionCategory>("/enabled-competition-categories/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateEnabledCompetitionCategory(
+  payload: EnabledCompetitionCategoryWritePayload,
+): Promise<EnabledCompetitionCategory> {
+  return request<EnabledCompetitionCategory>(
+    `/enabled-competition-categories/${payload.id}/`,
+    { method: "PATCH", body: JSON.stringify({ finalist_slots: payload.finalist_slots }) },
+  );
+}
+
+export async function deleteEnabledCompetitionCategory(id: number): Promise<void> {
+  await request<void>(`/enabled-competition-categories/${id}/`, { method: "DELETE" });
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────

@@ -1,4 +1,36 @@
-import type { Competition, Leaderboard, EventWod, EventResult, EventPhase } from "@/types";
+import type {
+  Competition,
+  CompetitionCategory,
+  EnabledCompetitionCategory,
+  Leaderboard,
+  EventWod,
+  EventResult,
+  EventPhase,
+} from "@/types";
+
+export function makeCompetitionCategory(
+  overrides: Partial<CompetitionCategory> = {},
+): CompetitionCategory {
+  return {
+    id: 1,
+    name: "RX Individual",
+    min_members: 1,
+    max_members: 1,
+    ...overrides,
+  };
+}
+
+export function makeEnabledCompetitionCategory(
+  overrides: Partial<EnabledCompetitionCategory> = {},
+): EnabledCompetitionCategory {
+  return {
+    id: 1,
+    competition: 1,
+    competition_category: 1,
+    finalist_slots: 2,
+    ...overrides,
+  };
+}
 
 export function makeCompetition(overrides: Partial<Competition> = {}): Competition {
   return {

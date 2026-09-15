@@ -158,6 +158,38 @@ Verificación: `npm run lint` → OK (0 errores, 1 warning preexistente `Sidebar
 - `npm run test` → **36/36**
 - `npm run build` → OK
 
+## Paso 21 — Módulo admin "Categorías disponibles" (COMPLETADO)
+
+> Implementación de la **Parte II-B** de `PROMPT.md` según el plan `PLAN.md` (sin tocar el backend).
+
+### Reglas de negocio implementadas
+- **Superadmin**: CRUD del catálogo de categorías (`CompetitionCategory`: `name`, `min_members`, `max_members`) en `/admin/categories`.
+- **Admin de competición**: NO crea/edita/elimina categorías; solo **habilita** categorías del catálogo en sus competiciones asignadas y asigna `finalist_slots` (clasificados a la Final; `0` = sin Final) en `/admin/competition-categories`.
+- Restricción de roles en **frontend**: `CategoriesPage`/`CategoryFormPage` bloquean si no es superadmin y `src/api/admin.ts` lanza error en las escrituras del catálogo si `user.is_superuser` es falso (`assertSuperUser`).
+
+### Cambios aplicados
+- **`src/types/index.ts`**: `CompetitionCategory` + `CompetitionCategoryWritePayload`; `EnabledCompetitionCategory` ahora con `competition_category` como **id numérico** (shape real del backend), + `EnabledCompetitionCategoryWritePayload`.
+- **`src/api/admin.ts`**: `fetchCompetitionCategories`, `fetchCompetitionCategory`, `create/update/deleteCompetitionCategory` (guard superadmin), `create/update/deleteEnabledCompetitionCategory` (PATCH solo `finalist_slots`). Se mantiene `fetchEnabledCompetitionCategories(competitionId)`.
+- **`src/hooks/useAdminModules.ts`**: hooks `useAdminCompetitionCategories`, `useCreate/Update/DeleteCompetitionCategory`, `useAdminEnabledCategories(competitionId)`, `useCreate/Update/DeleteEnabledCategory(competitionId)` con invalidación de queries por scope.
+- **`src/pages/admin/CategoriesPage.tsx`** (nuevo): tabla del catálogo, acceso solo superadmin, crear/editar/eliminar.
+- **`src/pages/admin/CategoryFormPage.tsx`** (nuevo): form react-hook-form + zod (`max_members >= min_members`), create/edit.
+- **`src/pages/admin/CompetitionCategoriesPage.tsx`** (nuevo): `CompetitionScopeSelect`, formulario para habilitar del catálogo + slots, tabla con edición inline de slots y quitar.
+- **`src/App.tsx`**: rutas `/admin/categories`, `/admin/categories/new`, `/admin/categories/:id/edit`, `/admin/competition-categories`.
+- **`src/components/admin/AdminSidebar.tsx`**: ítem "Categorías" (solo superadmin) y "Categorías por competición".
+
+### Tests
+- `tests/fixtures.ts`: `makeCompetitionCategory`, `makeEnabledCompetitionCategory`.
+- `tests/adminApi.test.ts`: 9 → 10 casos (bloqueo no-superadmin, CRUD catálogo, habilitaciones, PATCH solo `finalist_slots`).
+- `tests/CategoriesPage.test.tsx` (nuevo, 4): loading, tabla, sin acceso para admin, vacío.
+- `tests/CompetitionCategoriesPage.test.tsx` (nuevo, 4): habilitadas con nombre/slots, select solo categorías no habilitadas, vacío, botón deshabilitado sin competición.
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **55/55** (10 archivos)
+- `npm run build` → OK
+- Shape backend verificado en BD: catálogo y habilitaciones reales de competiciones (cf_a/cf_b/hy_a/hy_b).
+
 ## Paso 20 — Refactor del código fuente del frontend al nuevo modelo (COMPLETADO)
 
 > Eliminadas todas las referencias a `competition-stages`/`competition_stage`/`CompetitionStage` del código fuente del frontend (antes el usuario reportaba HTTP 404 en la tabla de eventos pública, al editar eventos/competiciones y en el leaderboard porque el frontend seguía llamando al endpoint `/competition-stages/` ya eliminado).

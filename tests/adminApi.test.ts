@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchAdminCompetitions } from "@/api/admin";
+import {
+  createCompetitionCategory,
+  deleteCompetitionCategory,
+  updateCompetitionCategory,
+  createEnabledCompetitionCategory,
+  updateEnabledCompetitionCategory,
+  deleteEnabledCompetitionCategory,
+  fetchEnabledCompetitionCategories,
+  fetchAdminCompetitions,
+} from "@/api/admin";
 import { request } from "@/api/client";
+import { useAuthStore } from "@/store/authStore";
 
 vi.mock("@/api/client", async () => {
   const actual =
@@ -42,5 +52,116 @@ describe("fetchAdminCompetitions", () => {
     });
     const result = await fetchAdminCompetitions();
     expect(result).toHaveLength(2);
+  });
+});
+
+describe("competition category catalog", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("blocks catalog writes when user is not superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: false });
+    await expect(
+      createCompetitionCategory({ name: "RX", min_members: 1, max_members: 1 }),
+    ).rejects.toThrow("No tenés permisos");
+    expect(mockedRequest).not.toHaveBeenCalled();
+  });
+
+  it("POSTs a new category when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({ id: 9, name: "RX", min_members: 1, max_members: 1 });
+    await createCompetitionCategory({ name: "RX", min_members: 1, max_members: 1 });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competition-categories/",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("PATCHes a category when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({ id: 9, name: "RX", min_members: 1, max_members: 2 });
+    await updateCompetitionCategory({ id: 9, name: "RX", min_members: 1, max_members: 2 });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competition-categories/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("DELETEs a category when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteCompetitionCategory(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competition-categories/9/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("enabled competition categories", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches enabled categories for a competition", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        { id: 1, competition: 1, competition_category: 1, finalist_slots: 2 },
+      ],
+    });
+    const result = await fetchEnabledCompetitionCategories(1);
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/enabled-competition-categories/?competition=1&page_size=100",
+    );
+  });
+
+  it("POSTs an enabled category", async () => {
+    mockedRequest.mockResolvedValue({
+      id: 2,
+      competition: 1,
+      competition_category: 2,
+      finalist_slots: 3,
+    });
+    await createEnabledCompetitionCategory({
+      competition: 1,
+      competition_category: 2,
+      finalist_slots: 3,
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/enabled-competition-categories/",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("PATCHes only finalist_slots", async () => {
+    mockedRequest.mockResolvedValue({
+      id: 2,
+      competition: 1,
+      competition_category: 2,
+      finalist_slots: 4,
+    });
+    await updateEnabledCompetitionCategory({
+      id: 2,
+      competition: 1,
+      competition_category: 2,
+      finalist_slots: 4,
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/enabled-competition-categories/2/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({ finalist_slots: 4 });
+  });
+
+  it("DELETEs an enabled category", async () => {
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteEnabledCompetitionCategory(2);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/enabled-competition-categories/2/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });

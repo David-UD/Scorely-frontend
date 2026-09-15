@@ -199,12 +199,59 @@ Eliminadas todas las referencias a `competition-stages`/`competition_stage`/`Com
 
 ---
 
+## Iteración 2026-09-15 — Módulo admin "Categorías disponibles"
+
+Implementación de la **Parte II-B** de `PROMPT.md` (plan `PLAN.md`): administración de categorías disponibles por roles, con restricción **solo a nivel frontend** (el backend aún no limita por rol estos endpoints).
+
+### Qué se implementó
+
+| Funcionalidad | Estado |
+|---|---|
+| `/admin/categories` — CRUD del catálogo de categorías (`name`, `min_members`, `max_members`) | ✅ |
+| **Solo superadmin** puede crear/editar/eliminar categorías del catálogo (UI + guard en API) | ✅ |
+| `/admin/categories/new` y `/admin/categories/:id/edit` — formulario react-hook-form + zod | ✅ |
+| `/admin/competition-categories` — habilitar categorías del catálogo en la competición asignada (scope) | ✅ |
+| Asignar `finalist_slots` (clasificados a la Final, `0` = sin Final), edición inline | ✅ |
+| Quitar habilitación (confirm) | ✅ |
+| Sidebar: ítem "Categorías" (solo superadmin) y "Categorías por competición" | ✅ |
+| Tests: fixtures + API + 2 páginas nuevas (55/55) | ✅ |
+
+### Reglas de negocio
+
+- **Superadmin**: mantiene el **catálogo** (`CompetitionCategory`). El admin de competición **no** puede agregar categorías.
+- **Admin de competición**: solo **habilita** categorías existentes en sus competiciones asignadas y define el slot de finalistas (`finalist_slots`).
+
+### Archivos
+
+- **`src/types/index.ts`**: `CompetitionCategory`, `CompetitionCategoryWritePayload`, `EnabledCompetitionCategory` con `competition_category` como **id numérico** (shape real del backend), `EnabledCompetitionCategoryWritePayload`.
+- **`src/api/admin.ts`**: `fetchCompetitionCategories`, `fetchCompetitionCategory`, `create/update/deleteCompetitionCategory` (con `assertSuperUser`), `create/update/deleteEnabledCompetitionCategory` (PATCH enviando solo `finalist_slots`), se mantuvo `fetchEnabledCompetitionCategories(competitionId)`.
+- **`src/hooks/useAdminModules.ts`**: queries/mutations de catálogo y de habilitaciones por scope con invalidación.
+- **`src/pages/admin/CategoriesPage.tsx`** y **`CategoryFormPage.tsx`** (nuevos): catálogo.
+- **`src/pages/admin/CompetitionCategoriesPage.tsx`** (nuevo): habilitaciones + slots.
+- **`src/App.tsx`** y **`src/components/admin/AdminSidebar.tsx`**: rutas y menú.
+
+### Verificación
+
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run typecheck` | OK |
+| `npm run test` | **55/55** en verde (10 archivos) |
+| `npm run build` | OK (Vite 6.4.3) |
+| Shape backend | Verificado en BD: catálogo (13 categorías) y habilitaciones reales (cf_a/cf_b/hy_a/hy_b) |
+
+### Pendiente / aviso
+
+- **El backend no restringe estos endpoints por rol** (`IsAuthenticated` global): la restricción de `CompetitionCategoryViewSet`/`EnabledCompetitionCategoryViewSet` está **solo en frontend**. Para una regla de negocio real, el backend debería aplicar `IsSuperAdmin` en la escritura del catálogo y `IsCompetitionAdmin` en las habilitaciones.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
 - [x] lint sin errores
 - [x] typecheck sin errores
-- [x] suite de tests en verde (frontend 39/39)
+- [x] suite de tests en verde (frontend 55/55)
 - [x] `/` renderiza recientes + pestaña "todas" (con backend disponible/público)
 - [x] `/` muestra **todas las competiciones publicadas** con sesión activa o no (2026-09-14)
 - [x] detalle muestra info, afiliación, fechas, mapa, WODs y leaderboard
@@ -213,6 +260,7 @@ Eliminadas todas las referencias a `competition-stages`/`competition_stage`/`Com
 - [x] `/admin/*` protegido (redirige a login sin sesión)
 - [x] solo español, tema claro
 - [x] no se tocó `free-react-tailwind-admin-dashboard/`
+- [x] (2026-09-15) módulo admin de categorías disponibles: catálogo solo superadmin; habilitación + `finalist_slots` por competición para admin de competición
 
 ## No se tocó
 

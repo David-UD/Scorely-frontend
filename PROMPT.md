@@ -12,7 +12,7 @@ Eres **Scorely Frontend**, un frontend developer especializado que implementa ac
 
 ## Alcance del frontend
 
-Cubre: registro/login de usuarios, panel de administración de competiciones (competencias, categorías habilitadas, etapas, eventos, participantes, resultados) y la **publicación pública de leaderboards** (qualifier/final). **NO** gestiona horarios, heats, jueces ni logística de competición.
+Cubre: registro/login de usuarios, panel de administración de competiciones (competencias, **catálogo de categorías y categorías habilitadas por competición**, eventos qualifier/final, participantes, resultados) y la **publicación pública de leaderboards** (qualifier/final). **NO** gestiona horarios, heats, jueces ni logística de competición.
 
 ## Tech Stack (fijo — elegido: SPA separada, todo OSS/MIT/Apache-2.0)
 
@@ -46,7 +46,7 @@ El proyecto clonado (`https://github.com/TailAdmin/free-react-tailwind-admin-das
 | Layout del panel `/admin` | `DefaultLayout` + Sidebar accesible colapsable + Header con breadcrumbs, notificaciones y dropdown de usuario |
 | Login / cambio de contraseña | Formularios de autenticación (SignIn) |
 | Dashboard por rol (`/admin/`) | Tarjetas (`Card`) de métricas (competencias, participantes, eventos) |
-| CRUD de competencias y categorías habilitadas | Estilo de tablas (`Table`), formularios y modales |
+| CRUD de competencias, catálogo de categorías y categorías habilitadas | Estilo de tablas (`Table`), formularios y modales |
 | Etapas y eventos de una competición | Tablas, formularios anidados, `Breadcrumb` (Qualifier/Final por competición) |
 | Participantes / equipos / resultados | Tablas densas, formularios, `Modal`/`Alert` para confirmaciones |
 | Leaderboards públicos (qualifier/final) | **A medida** (página pública, no de TailAdmin) |
@@ -90,7 +90,9 @@ Públicas (sin auth) — construidas a medida con Tailwind:
 Panel admin (requieren JWT + rol, bajo <RoleGuard>) — sobre layout TailAdmin:
   /admin/                                      → dashboard según rol
   /admin/competitions/...                      → CRUD de competencias (superadmin)
-  /admin/<competition>/...                     → categorías, etapas, eventos, participantes, resultados (admin de competición)
+  /admin/categories                            → CRUD del catálogo de categorías (solo superadmin)
+  /admin/competition-categories                → categorías habilitadas por competición (admin de competición, con CompetitionScopeSelect)
+  /admin/<competition>/...                     → categorías, eventos, participantes, resultados (admin de competición)
 ```
 
 **Reglas de convenciones** (verificar en el código, no asumir):
@@ -136,6 +138,79 @@ Panel admin (requieren JWT + rol, bajo <RoleGuard>) — sobre layout TailAdmin:
 - Documentar avances en `Process.md` al iniciar y finalizar cada paso.
 - No añadir comentarios al código salvo que se soliciten.
 - No inventar tokens, claves, URLs ni datos sensibles; usar variables de entorno del proyecto existente.
+
+---
+
+# Parte II-B — Módulo admin: Categorías disponibles
+
+## 1. Título
+
+Administración de **categorías disponibles**: el superadmin mantiene el **catálogo** de categorías (`CompetitionCategory`); el admin de competición solo **habilita** categorías del catálogo en sus competiciones asignadas y define el **slot de finalistas** (`finalist_slots`) por categoría.
+
+## 2. Objetivo
+
+- **Superadmin**: CRUD completo del catálogo de categorías (`/admin/categories`) — crear, editar y eliminar categorías (`name`, `min_members`, `max_members`).
+- **Admin de competición**: NO puede crear/editar/eliminar categorías del catálogo. Solo puede **habilitar** categorías existentes en las competiciones que le fueron asignadas (`/admin/competition-categories`) y asignar el `finalist_slots` (cuántos pasan a la Final; `0` = sin Final).
+- Regla de roles: **quién crea categorías = superadmin; quién habilita + slots = admin de competición sobre sus competiciones.**
+
+## 3. Alcance
+
+**Incluye:**
+- Página `/admin/categories` (solo superadmin): lista y CRUD (crear/editar/eliminar) de `CompetitionCategory`.
+- Página `/admin/competition-categories` (admin de competición): con `CompetitionScopeSelect` para elegir la competición asignada; lista las categorías habilitadas de esa competición y permite habilitar/quitar categorías del catálogo y editar `finalist_slots`.
+- Ocultamiento y **bloqueo por rol en frontend**: el CRUD del catálogo se muestra y permite escritura **solo si el usuario logueado es superadmin** (`user.is_superuser`); si no es superadmin, se oculta `/admin/categories` y las llamadas de escritura al catálogo se bloquean en frontend (defensa en UI).
+
+**Excluye:**
+- No se toca el backend. **AVISO al usuario:** hoy el backend expone `competition-categories/` y `enabled-competition-categories/` con permiso global `IsAuthenticated` (cualquier usuario autenticado podría escribir); la restricción de roles se hace **solo a nivel frontend** en esta iteración. Queda como observación que el backend debería bloquear la escritura del catálogo a no-superadmins.
+- No tocar la carpeta clon de TailAdmin, no crear ramas ni git.
+
+## 4. Endpoints del API utilizados
+
+> Ambos `ModelViewSet` — read/escritura con JWT. Catálogo: `CompetitionCategorySerializer` (`id`, `name`, `min_members`, `max_members`). Habilitaciones: `EnabledCompetitionCategorySerializer` (`id`, `competition`, `competition_category` = id de `CompetitionCategory`, `finalist_slots`), `filterset_fields = ('competition',)`.
+
+| Acción | Método | URL | Auth | Rol frontend |
+|--------|--------|-----|------|-------------|
+| Listar catálogo | GET | `/api/v1/competition-categories/` | JWT | superadmin + admin (para el select de categorías) |
+| Crear categoría | POST | `/api/v1/competition-categories/` | JWT | **solo superadmin** |
+| Editar categoría | PATCH | `/api/v1/competition-categories/{id}/` | JWT | **solo superadmin** |
+| Eliminar categoría | DELETE | `/api/v1/competition-categories/{id}/` | JWT | **solo superadmin** |
+| Habilitaciones por competición | GET | `/api/v1/enabled-competition-categories/?competition={id}` | JWT | admin (scope) |
+| Habilitar categoría | POST | `/api/v1/enabled-competition-categories/` | JWT | admin (scope) — payload `{ competition, competition_category, finalist_slots }` |
+| Editar habilitación (slots) | PATCH | `/api/v1/enabled-competition-categories/{id}/` | JWT | admin (scope) |
+| Quitar habilitación | DELETE | `/api/v1/enabled-competition-categories/{id}/` | JWT | admin (scope) |
+
+> El admin de competición para habilitar usa el **catálogo existente** (`GET /competition-categories/`, solo lectura) y crea `EnabledCompetitionCategory` — **no** crea categorías.
+
+## 5. Datos / DTOs
+
+- `CompetitionCategory`: `id`, `name`, `min_members`, `max_members`.
+- `EnabledCompetitionCategory`: `id`, `competition` (id), `competition_category` (id de `CompetitionCategory`), `finalist_slots` (número de clasificados a Final; `0` = sin Final). Constraint único `(competition, competition_category)`.
+- Para mostrar el nombre de la categoría habilitada, cruzar en frontend las habilitaciones con el catálogo (o usar el payload según el shape del backend).
+
+## 6. Cambios en componentes / estructura
+
+- Nuevo tipo `CompetitionCategory` en `src/types/index.ts` (y actualizar `EnabledCompetitionCategory` según el shape real del backend).
+- `src/api/admin.ts`: `fetchCompetitionCategories()` (GET), `createCompetitionCategory()`, `updateCompetitionCategory()`, `deleteCompetitionCategory()`; `createEnabledCompetitionCategory()`, `updateEnabledCompetitionCategory(finalist_slots)`, `deleteEnabledCompetitionCategory()`.
+- Páginas nuevas: `src/pages/admin/CategoriesPage.tsx` (CATÁLOGO — solo superadmin) y `src/pages/admin/CompetitionCategoriesPage.tsx` (habilitación por competición + `CompetitionScopeSelect` + slots).
+- Formularios (modal o página): `CategoryFormPage.tsx` / modal con `name`, `min_members`, `max_members`; y habilitación con select de categoría + `finalist_slots`.
+- Menú lateral (solo superadmin): ítem "Categorías" → `/admin/categories`. (Ítem "Categorías de competición" visible a admin de competición.)
+- Rutas en el router admin con `<RoleGuard>` / condición por `is_superuser`.
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Superadmin ve CRUD | Login superadmin → `/admin/categories` | Puede crear/editar/eliminar categorías |
+| Admin no ve CRUD | Login admin de competición | `/admin/categories` oculto/no accesible; llamada a crear categoría → bloqueada en frontend |
+| Admin habilita categoría | Admin en competición asignada | Habilitar categoría del catálogo + set `finalist_slots` persiste |
+| Bloqueo escritura catálogo | No-superadmin intenta POST a catálogo | Frontend no emite la petición (guard por rol) |
+| Quitar habilitación | Admin quita categoría habilitada | Desaparece de la lista y del leaderboard |
+
+## 8. Observaciones / riesgos
+
+- **Restricción de roles SOLO en frontend (por ahora):** el backend hoy no limita quién crea categorías (`IsAuthenticated` global). Se oculta/bloquea en UI según `is_superuser`, pero **avisar** al usuario que el backend debería restringir la escritura de `CompetitionCategoryViewSet` a superadmin para una regla de negocio real.
+- El admin de competición **solo ve sus competiciones asignadas**; la página de habilitación usa el `CompetitionScopeSelect` existente (mismo patrón que eventos/equipos).
+- Borrar una categoría con habilitaciones: backend usa `CASCADE` en `EnabledCompetitionCategory.competition_category` → revisar que borrar del catálogo no deje estados rotos; si se prefiere impedir el borrado, avisar para evaluación backend.
 
 ---
 

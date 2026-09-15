@@ -39,10 +39,21 @@ export default function AdminSidebar() {
       path: "/admin/competitions",
       enabled: true,
     },
+    ...(isSuperUser
+      ? [
+          {
+            name: "Categorías",
+            icon: <GroupIcon />,
+            path: "/admin/categories",
+            enabled: true,
+          },
+        ]
+      : []),
   ];
 
   const manageItems: NavItem[] = [
     { name: "Eventos", icon: <ListIcon />, path: "/admin/events", enabled: true },
+    { name: "Categorías por competición", icon: <GroupIcon />, path: "/admin/competition-categories", enabled: true },
     { name: "Atletas", icon: <UsersIcon />, path: "/admin/athletes", enabled: true },
     { name: "Equipos", icon: <GroupIcon />, path: "/admin/teams", enabled: true },
   ];

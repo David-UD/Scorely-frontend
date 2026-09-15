@@ -9,6 +9,9 @@ import LoginPage from "@/pages/auth/LoginPage";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import CompetitionsPage from "@/pages/admin/CompetitionsPage";
 import CompetitionFormPage from "@/pages/admin/CompetitionFormPage";
+import CategoriesPage from "@/pages/admin/CategoriesPage";
+import CategoryFormPage from "@/pages/admin/CategoryFormPage";
+import CompetitionCategoriesPage from "@/pages/admin/CompetitionCategoriesPage";
 import EventsPage from "@/pages/admin/EventsPage";
 import EventFormPage from "@/pages/admin/EventFormPage";
 import AthletesPage from "@/pages/admin/AthletesPage";
@@ -40,6 +43,10 @@ export default function App() {
           <Route path="/admin/competitions" element={<CompetitionsPage />} />
           <Route path="/admin/competitions/new" element={<CompetitionFormPage />} />
           <Route path="/admin/competitions/:id/edit" element={<CompetitionFormPage />} />
+          <Route path="/admin/categories" element={<CategoriesPage />} />
+          <Route path="/admin/categories/new" element={<CategoryFormPage />} />
+          <Route path="/admin/categories/:id/edit" element={<CategoryFormPage />} />
+          <Route path="/admin/competition-categories" element={<CompetitionCategoriesPage />} />
           <Route path="/admin/events" element={<EventsPage />} />
           <Route path="/admin/events/new" element={<EventFormPage />} />
           <Route path="/admin/events/:id/edit" element={<EventFormPage />} />
