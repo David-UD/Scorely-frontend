@@ -246,6 +246,87 @@ Implementación de la **Parte II-B** de `PROMPT.md` (plan `PLAN.md`): administra
 
 ---
 
+## Iteración 2026-09-15 — Vista pública: medallas en el leaderboard + fix del mapa
+
+### Problema reportado
+- La competición `summer-games-crossfit` (id 5) tiene coordenadas pero la sección "Ubicación" mostraba "**Mapa no disponible**".
+
+### Causa raíz
+`LocationMap` validaba `typeof latitude === "number"`, pero el backend devuelve `latitude`/`longitude` de `Location` como **strings** (`"19.826473"`, `"-90.524499"`) o `null`. La comprobación estricta de tipo rechazaba coordendas válidas.
+
+### Cambios aplicados
+| Archivo | Cambio |
+|---|---|
+| `src/types/index.ts` | `Location.latitude`/`longitude` tipadas `number \| string \| null` |
+| `src/components/public/LocationMap.tsx` | Coerción con `Number()`; "Mapa no disponible" solo sin coordendas válidas |
+| `src/components/public/MedalIcon.tsx` (nuevo) | SVG propio gratuito, color oro/plata/bronce por rank (`medal-1/2/3`) |
+| `src/components/public/CombinedLeaderboardTable.tsx` | Celda `WodCell`: medalla del top-3 del `event_rank` junto al puntaje de cada WOD |
+| `PROMPT.md` | §6/§8/§12: coords string/null del backend y medallas por WOD documentadas |
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente) |
+| `npm run typecheck` | OK |
+| `npm run test` | **59/59** en verde (10 archivos) — +4 tests (mapa string/null, medallas oro/plata) |
+| `npm run build` | OK |
+| Backend real | `GET /competitions/` → `summer-games-crossfit` con `latitude: "19.826473"`, `longitude: "-90.524499"` (strings) |
+
+### Notas
+- El mapa se carga vía **embed gratuito de OpenStreetMap** (sin API key); los strings se convierten a número antes de armar `mlat`/`mlon`.
+- Las medallas son SVGs propios (sin emojis ni librerías): oro/plata/bronce para el top-3 de cada WOD en las columnas `Score N`.
+
+---
+
+## Iteración 2026-09-15 — Fix zoom del mapa público (OSM embed)
+
+### Problema reportado
+"Puse las coordenadas, pero el mapa me muestra muy alejado" (un zoom ~12-13 en vez de cercano).
+
+### Causa raíz
+El embed de OSM (`embed.html`) **ignora el parámetro `zoom`** — el nivel lo dicta el `bbox`. El `bbox` previo era fijo y enorme (±0.02° / ±0.0125°) y, además, el marker se enviaba como `mlat`/`mlon`, params que el embed no usa.
+
+### Cambios aplicados
+- `LocationMap.tsx`: `bbox` calculado desde **zoom 16** con metros-por-píxel corregidos por latitud; ancho real medido con **ResizeObserver** (fallback 640px); marker enviado como `marker=LAT,LON` (se eliminó `zoom`/`mlat`/`mlon`).
+- Test: coords strings → `marker=19.826473,-90.524499`; nuevo test de `bbox` estrecho (< 0.5°).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente) |
+| `npm run typecheck` | OK |
+| `npm run test` | **60/60** en verde (10 archivos) |
+| `npm run build` | OK |
+
+### Notas
+- Ajustar el zoom objetivo cambiando la constante `TARGET_ZOOM` en `LocationMap.tsx` (16 = nivel de cuadra/calle).
+- El zoom real dentro del iframe depende del ancho medido (ResizeObserver); en pantallas muy pequeñas el bbox se encoge para mantener el mismo acercamiento.
+
+---
+
+## Iteración 2026-09-15 — Mapa público: cambio a Google Maps (legacy, sin key)
+
+### Decisión del usuario
+Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin API key** (`maps.google.com/maps?q=...&z=16&output=embed`) — gratis, sin Google Cloud, sin key, sin billing.
+
+### Cambios aplicados
+- `LocationMap.tsx` reescrito: URL `https://maps.google.com/maps?q=LAT,LNG&z=16&output=embed`. Se eliminaron el `bbox`, `ResizeObserver` y el ancho medido (Google admite `z` explícito). Se mantiene la coerción de coords string/null y el `allowFullScreen`.
+- Tests actualizados: coords strings → `q=19.826473,-90.524499` + `z=16`; centro/zoom → `q=-34.6,-58.38`, `z=16`, `output=embed`.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente) |
+| `npm run typecheck` | OK |
+| `npm run test` | **60/60** en verde (10 archivos) |
+| `npm run build` | OK |
+
+### Notas
+- Zoom ajustable con la constante `TARGET_ZOOM` en `LocationMap.tsx`.
+- Riesgo: el endpoint legacy no es oficial de Google. Migración futura a la Maps Embed API oficial (`VITE_GOOGLE_MAPS_KEY` + restricción por referrer) si dejara de funcionar.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores

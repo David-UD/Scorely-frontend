@@ -25,8 +25,8 @@ export interface Location {
   city: string;
   state: string;
   country: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }
 
 export interface CompetitionSummary {

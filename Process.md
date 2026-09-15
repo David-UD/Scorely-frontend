@@ -190,6 +190,83 @@ Verificación: `npm run lint` → OK (0 errores, 1 warning preexistente `Sidebar
 - `npm run build` → OK
 - Shape backend verificado en BD: catálogo y habilitaciones reales de competiciones (cf_a/cf_b/hy_a/hy_b).
 
+## Paso 24 — Mapa público: cambio a Google Maps (legacy, sin key) (COMPLETADO)
+
+> Pedido del usuario: "usar mejor google maps". Variante elegida: **legacy sin API key** (`maps.google.com/maps?q=...&z=16&output=embed`).
+
+### Decisión
+Google Maps **legacy embed sin key** (gratis, sin proyecto GCP, sin billing). El zoom con Google sí se controla con el parámetro `z` explícito (a diferencia del `embed.html` de OSM que lo ignora), lo que simplificó mucho el componente.
+
+### Cambios aplicados
+- **`src/components/public/LocationMap.tsx`**:
+  - `buildEmbedUrl` → `https://maps.google.com/maps?q={lat},{lng}&z=16&output=embed`.
+  - Eliminados el cálculo de `bbox`/metros-por-píxel, `ResizeObserver` y el `Ref`/estado de ancho (ya no hacen falta: Google centra por `q` y fija zoom por `z`).
+  - Se conserva la coerción de coords string/null (`toNumber`) y los estados vacíos "Sin ubicación" / "Mapa no disponible".
+  - Añadido `allowFullScreen` al iframe.
+
+### Tests (`tests/CompetitionDetail.test.tsx`)
+- Coords strings → `src` contiene `q=19.826473,-90.524499` y `z=16`.
+- Centro/zoom: `src` contiene `q=-34.6,-58.38`, `z=16` y `output=embed`.
+- Se eliminó el test de `bbox` estrecho (no aplica a Google).
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **60/60**
+- `npm run build` → OK
+
+## Paso 23 — Fix zoom del mapa público (OSM embed) (COMPLETADO)
+
+> Reporte de usuario: "puse las coordenadas, pero el mapa me muestra muy alejado".
+
+### Causa raíz
+El `embed.html` de OpenStreetMap **ignora el parámetro `zoom`**; el nivel de zoom lo determina el `bbox`. El `bbox` anterior era fijo y enorme (±0.02° lon / ±0.0125° lat ≈ varios km) → el mapa forzaba un zoom ~12-13 ("muy alejado"). Además el marker se enviaba con `mlat`/`mlon`, param que el embed no usa (el correcto es `marker=LAT,LON`).
+
+### Cambios aplicados
+- **`src/components/public/LocationMap.tsx`**:
+  - `buildEmbedUrl` ahora computa el `bbox` desde un **zoom objetivo 16** con metros-por-píxel corregidos por latitud (`metersPerPx = 2π·R·cos(lat) / 256 / 2^zoom`; span en grados = halfPx·m/px ÷ (111320·cos(lat)) para lon y ÷ 110540 para lat).
+  - Ancho real del contenedor medido con **`ResizeObserver`** (fallback 640px si no está disponible, p.ej. jest/jsdom); el alto del iframe es fijo (`h-72` = 288px).
+  - Marker como `marker=LAT,LON`; eliminados `zoom` y `mlat`/`mlon`.
+
+### Tests
+- `tests/CompetitionDetail.test.tsx`: coords strings → el `src` contiene `marker=19.826473,-90.524499` (antes `mlat=...`).
+- Nuevo: `bbox` estrecho centrado en las coords (span < 0.5°) garantizando zoom cercano.
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **60/60**
+- `npm run build` → OK
+
+## Paso 22 — Vista pública: medallas en leaderboard + fix mapa (COMPLETADO)
+
+> Encargo del usuario: "actualiza PROMPT.md en la vista pública en la tabla de Leaderboard, agrega las medallas, verifica el mapa".
+
+### Bug de mapa (causa raíz)
+`LocationMap` exigía `typeof latitude === "number"`, pero el backend (DRF) serializa `latitude`/`longitude` como **strings** cuando están cargadas (ej. `"19.826473"`, `"-90.524499"` en `summer-games-crossfit`) y como `null` cuando no. Resultado: competiciones con coordenadas mostraban "Mapa no disponible".
+
+### Cambios aplicados
+- **`src/types/index.ts`**: `Location.latitude`/`longitude` ahora `number | string | null` (shape real del backend).
+- **`src/components/public/LocationMap.tsx`**: coacciona coordendas con `Number()` (helper `toNumber`, rechaza `""`/no-finitos). Muestra "Mapa no disponible" solo si no hay coordendas válidas.
+- **`src/components/public/MedalIcon.tsx`** (nuevo): SVG propio gratuito (sin emojis ni librerías) con colores oro `#F6C14E`, plata `#D7DCE2`, bronce `#E0A36A`; `data-testid="medal-{rank}"`.
+- **`src/components/public/CombinedLeaderboardTable.tsx`**: nueva celda `WodCell` — muestra el icono de medalla (top-3 del `event_rank` del WOD) junto al puntaje en cada celda de WOD.
+
+### PRÓMPT (PROMPT.md)
+- **§6 DTOs**: nota de que `latitude`/`longitude` llegan como string/null y el mapa debe coaccionar con `Number()`.
+- **§8 Componentes**: `CombinedLeaderboardTable` ahora documenta las **medallas por WOD** (SVG propio oro/plata/bronce para el top-3 del `event_rank`).
+- **§12 Observaciones**: nota del embed OSM con coords coaccionadas.
+
+### Tests (nuevos en `tests/CompetitionDetail.test.tsx`)
+- Mapa con coords como **strings** → el iframe se renderiza y el `src` contiene `mlat=19.826473`.
+- Mapa con coords `null` → "Mapa no disponible".
+- Leaderboard: medalla de oro para el ganador de cada WOD (`medal-1`) y de plata para el 2º (`medal-2`).
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **59/59**
+- `npm run build` → OK
+
 ## Paso 20 — Refactor del código fuente del frontend al nuevo modelo (COMPLETADO)
 
 > Eliminadas todas las referencias a `competition-stages`/`competition_stage`/`CompetitionStage` del código fuente del frontend (antes el usuario reportaba HTTP 404 en la tabla de eventos pública, al editar eventos/competiciones y en el leaderboard porque el frontend seguía llamando al endpoint `/competition-stages/` ya eliminado).

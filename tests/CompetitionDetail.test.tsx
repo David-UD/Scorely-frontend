@@ -163,6 +163,58 @@ describe("CompetitionDetail", () => {
     expect(mapFrame).toHaveAttribute("src");
   });
 
+  it("renders the map iframe when coordinates arrive as strings (backend shape)", () => {
+    mockedUseCompetition.mockReturnValue(
+      result<Competition>(
+        makeCompetition({
+          location: {
+            id: 1,
+            name: "Box El Pilar",
+            city: "BsAs",
+            state: "BsAs",
+            country: "AR",
+            latitude: "19.826473",
+            longitude: "-90.524499",
+          },
+        }),
+      ),
+    );
+    renderDetail();
+    const mapFrame = screen.getByTitle("Mapa de Box El Pilar");
+    expect(mapFrame).toBeInTheDocument();
+    expect(mapFrame.getAttribute("src")).toContain("q=19.826473,-90.524499");
+    expect(mapFrame.getAttribute("src")).toContain("z=16");
+  });
+
+  it("centers the map on the coordinates at a near zoom", () => {
+    renderDetail();
+    const mapFrame = screen.getByTitle("Mapa de Box El Pilar");
+    const src = mapFrame.getAttribute("src") ?? "";
+    expect(src).toContain("q=-34.6,-58.38");
+    expect(src).toContain("z=16");
+    expect(src).toContain("output=embed");
+  });
+
+  it("shows 'Mapa no disponible' when coordinates are null", () => {
+    mockedUseCompetition.mockReturnValue(
+      result<Competition>(
+        makeCompetition({
+          location: {
+            id: 1,
+            name: "Box El Pilar",
+            city: "BsAs",
+            state: "BsAs",
+            country: "AR",
+            latitude: null,
+            longitude: null,
+          },
+        }),
+      ),
+    );
+    renderDetail();
+    expect(screen.getByText("Mapa no disponible")).toBeInTheDocument();
+  });
+
   it("renders WODs in a table per phase", () => {
     renderDetail();
     expect(screen.getByRole("heading", { name: "Workouts" })).toBeInTheDocument();
@@ -184,6 +236,18 @@ describe("CompetitionDetail", () => {
 
     // El no clasificado muestra "-" en la fase final (sin puntos) y en Total
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows medal icons for the WOD winner in the leaderboard", () => {
+    renderDetail();
+    // Ana gana todos los WODs (event_rank 1) → al menos una medalla de oro
+    expect(screen.getAllByTestId("medal-1").length).toBeGreaterThan(0);
+  });
+
+  it("shows silver medal icon for a WOD runner-up", () => {
+    renderDetail();
+    // "No Clasifica" tiene event_rank 2 en los qualifier WODs → medallas de plata
+    expect(screen.getAllByTestId("medal-2").length).toBeGreaterThan(0);
   });
 
   it("allows filtering leaderboard by category", async () => {

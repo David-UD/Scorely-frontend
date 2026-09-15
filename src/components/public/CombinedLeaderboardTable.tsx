@@ -1,5 +1,6 @@
 import type { CombinedLeaderboardEntry, EventResult, EventWod } from "@/types";
 import EmptyState from "@/components/common/EmptyState";
+import MedalIcon from "@/components/public/MedalIcon";
 
 interface CombinedLeaderboardTableProps {
   title?: string;
@@ -29,6 +30,29 @@ function enrich(event: EventResult | undefined): string {
   if (event.event_rank != null) parts.push(`#${event.event_rank}`);
   if (event.result) parts.push(event.result);
   return parts.join(" · ") || "-";
+}
+
+function medalFor(rank: number | null | undefined): 1 | 2 | 3 | null {
+  if (rank === 1 || rank === 2 || rank === 3) return rank;
+  return null;
+}
+
+function WodCell({ result }: { result: EventResult | undefined }) {
+  if (!result) {
+    return <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">-</td>;
+  }
+
+  const medal = medalFor(result.event_rank);
+
+  return (
+    <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">
+      <span className="inline-flex items-center justify-center gap-1.5">
+        {medal != null && <MedalIcon rank={medal} className="size-4 shrink-0" />}
+        {score(result.score)}
+      </span>
+      <span className="block text-xs text-gray-400">{enrich(result)}</span>
+    </td>
+  );
 }
 
 export default function CombinedLeaderboardTable({
@@ -107,30 +131,16 @@ export default function CombinedLeaderboardTable({
               </td>
               <td className="px-5 py-3.5 font-medium text-gray-800">{entry.display_name}</td>
               {sortedQualWods.map((wod) => (
-                <td key={wod.id} className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">
-                  {score(resultByEvent(entry, wod.id)?.score)}
-                  {resultByEvent(entry, wod.id) && (
-                    <span className="block text-xs text-gray-400">
-                      {enrich(resultByEvent(entry, wod.id))}
-                    </span>
-                  )}
-                </td>
+                <WodCell key={wod.id} result={resultByEvent(entry, wod.id)} />
               ))}
               {sortedQualWods.length === 0 && (
-                <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">-</td>
+                <WodCell result={undefined} />
               )}
               {sortedFinalWods.map((wod) => (
-                <td key={wod.id} className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">
-                  {score(resultByEvent(entry, wod.id)?.score)}
-                  {resultByEvent(entry, wod.id) && (
-                    <span className="block text-xs text-gray-400">
-                      {enrich(resultByEvent(entry, wod.id))}
-                    </span>
-                  )}
-                </td>
+                <WodCell key={wod.id} result={resultByEvent(entry, wod.id)} />
               ))}
               {sortedFinalWods.length === 0 && (
-                <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">-</td>
+                <WodCell result={undefined} />
               )}
               <td className="px-5 py-3.5 text-center font-semibold text-gray-900">{total(entry)}</td>
             </tr>
