@@ -59,19 +59,19 @@ export interface CompetitionWritePayload {
   slug?: string;
 }
 
-export interface CompetitionStage {
+export type EventPhase = "QUALIFIER" | "FINAL";
+
+export interface EnabledCompetitionCategory {
   id: number;
   competition: number;
-  name?: string;
-  code?: string;
-  stage_type?: string;
-  qualification_count?: number;
-  order?: number;
+  competition_category: { id: number; code: string; name: string };
+  finalist_slots: number;
 }
 
 export interface EventWod {
   id: number;
-  competition_stage: number;
+  competition: number;
+  phase: EventPhase;
   event_number: number;
   name: string;
   workout: string;
@@ -82,13 +82,24 @@ export interface EventWod {
 
 export interface EventWritePayload {
   id?: number;
-  competition_stage: number;
+  competition: number;
+  phase: EventPhase;
   event_number: number;
   name: string;
   workout: string;
   description?: string;
   is_ascending: boolean;
   is_active: boolean;
+}
+
+export interface EventResult {
+  event_id: number;
+  event_number: number;
+  event_name: string;
+  phase: EventPhase;
+  result: string | null;
+  event_rank: number | null;
+  score: number | null;
 }
 
 export interface Athlete {
@@ -135,6 +146,7 @@ export interface LeaderboardEntry {
   final_score: string;
   event_ranks: Array<number | null>;
   event_scores?: Array<number | null>;
+  event_results?: EventResult[];
 }
 
 export type LeaderboardStage = "qualifier" | "final";
@@ -144,6 +156,20 @@ export interface Leaderboard {
   stage: LeaderboardStage;
   category: CategoryRef;
   entries: LeaderboardEntry[];
+}
+
+export interface CombinedLeaderboardEntry {
+  rank: number;
+  competitor_id: number;
+  display_name: string;
+  event_results: EventResult[];
+  total_score: number;
+  qualified: boolean;
+}
+
+export interface CombinedLeaderboard {
+  category: CategoryRef;
+  entries: CombinedLeaderboardEntry[];
 }
 
 export interface TokenPair {

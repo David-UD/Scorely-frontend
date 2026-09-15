@@ -3,7 +3,8 @@ import {
   getCompetitions,
   getCompetition,
   getLeaderboard,
-  getCompetitionStages,
+  getEvents,
+  getEnabledCompetitionCategories,
 } from "@/api/public";
 import { request, ApiError } from "@/api/client";
 
@@ -85,22 +86,67 @@ describe("getLeaderboard", () => {
   });
 });
 
-describe("getCompetitionStages", () => {
-  it("maps stage_type to code and keeps name", async () => {
-    mockedRequest.mockResolvedValue([
-      { id: 12, competition: 8, stage_type: "QUALIFIER", order: 1 },
-      { id: 13, competition: 8, stage_type: "FINAL", order: 2 },
-    ]);
-    mockedRequest.mockClear();
+describe("getEvents", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    const result = await getCompetitionStages(8);
+  it("requests events filtered by competition and phase, without auth", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        { id: 1, competition: 8, phase: "QUALIFIER", event_number: 1, name: "Fran" },
+      ],
+    });
+
+    const result = await getEvents(8, "QUALIFIER");
     expect(mockedRequest).toHaveBeenCalledWith(
-      "/competition-stages/?competition=8",
+      "/events/?competition=8&page_size=100&phase=QUALIFIER",
+      { auth: false },
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Fran");
+  });
+
+  it("allows fetching all phases when no phase filter is passed", async () => {
+    mockedRequest.mockResolvedValue({ results: [] });
+    await getEvents(8);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/events/?competition=8&page_size=100",
+      { auth: false },
+    );
+  });
+
+  it("unwraps a plain array response", async () => {
+    mockedRequest.mockResolvedValue([{ id: 1, competition: 8, phase: "FINAL", event_number: 1 }]);
+    const result = await getEvents(8, "FINAL");
+    expect(result).toHaveLength(1);
+    expect(result[0].phase).toBe("FINAL");
+  });
+});
+
+describe("getEnabledCompetitionCategories", () => {
+  it("maps finalist_slots and category refs", async () => {
+    mockedRequest.mockResolvedValue([
+      {
+        id: 3,
+        competition: 8,
+        finalist_slots: 10,
+        competition_category: { id: 1, code: "rx", name: "RX" },
+      },
+    ]);
+
+    const result = await getEnabledCompetitionCategories(8);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/enabled-competition-categories/?competition=8",
       { auth: false },
     );
     expect(result).toEqual([
-      { id: 12, competition: 8, name: "", code: "qualifier" },
-      { id: 13, competition: 8, name: "", code: "final" },
+      {
+        id: 3,
+        competition: 8,
+        finalist_slots: 10,
+        competition_category: { id: 1, code: "rx", name: "RX" },
+      },
     ]);
   });
 });

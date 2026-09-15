@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
-import { fetchEvent, fetchStage, fetchStages } from "@/api/admin";
+import { fetchEvent } from "@/api/admin";
 import {
   useCreateEvent,
   useUpdateEvent,
@@ -15,11 +15,12 @@ import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
-import { stageLabel } from "@/utils/format";
-import type { EventWritePayload } from "@/types";
+import type { EventPhase, EventWritePayload } from "@/types";
 
 const eventSchema = z.object({
-  competition_stage: z.coerce.number().min(1, "Selecciona una etapa"),
+  phase: z.enum(["QUALIFIER", "FINAL"], {
+    message: "Selecciona una fase",
+  }),
   event_number: z.coerce.number().min(1, "Número de evento inválido"),
   name: z.string().min(1, "El nombre es obligatorio"),
   workout: z.string().min(1, "El workout es obligatorio"),
@@ -51,27 +52,6 @@ export default function EventFormPage() {
     enabled: isEditing,
   });
 
-  const stageId = detailQuery.data?.competition_stage;
-  const stageQuery = useQuery({
-    queryKey: ["admin", "stage", stageId],
-    queryFn: () => fetchStage(stageId as number),
-    enabled: isEditing && Boolean(stageId),
-  });
-
-  const editCompetitionId = stageQuery.data?.competition;
-  const stagesQuery = useQuery({
-    queryKey: ["admin", "stages", editCompetitionId],
-    queryFn: () => fetchStages(editCompetitionId as number),
-    enabled: isEditing && Boolean(editCompetitionId),
-  });
-
-  const createStagesQuery = useQuery({
-    queryKey: ["admin", "stages", "scope", scopeCompetitionId],
-    queryFn: () => fetchStages(scopeCompetitionId as number),
-    enabled: !isEditing && Boolean(scopeCompetitionId),
-    staleTime: 30_000,
-  });
-
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -82,7 +62,7 @@ export default function EventFormPage() {
   } = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
-      competition_stage: 0,
+      phase: "QUALIFIER",
       event_number: 1,
       name: "",
       workout: "",
@@ -96,7 +76,7 @@ export default function EventFormPage() {
     if (detailQuery.data) {
       const e = detailQuery.data;
       reset({
-        competition_stage: e.competition_stage,
+        phase: e.phase as EventPhase,
         event_number: e.event_number,
         name: e.name,
         workout: e.workout,
@@ -108,19 +88,13 @@ export default function EventFormPage() {
   }, [detailQuery.data, reset]);
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const loadingEdit =
-    isEditing &&
-    (detailQuery.isLoading || (detailQuery.isSuccess && stageQuery.isLoading) ||
-      (stageQuery.isSuccess && stagesQuery.isLoading));
+  const loadingEdit = isEditing && detailQuery.isLoading;
 
   if (loadingEdit) {
     return <Spinner label="Cargando evento…" />;
   }
 
-  if (
-    (isEditing && (detailQuery.isError || stageQuery.isError || stagesQuery.isError)) ||
-    (!isEditing && createStagesQuery.isError)
-  ) {
+  if (isEditing && detailQuery.isError) {
     return (
       <ErrorState
         title="No se pudo cargar la información"
@@ -129,13 +103,23 @@ export default function EventFormPage() {
     );
   }
 
-  const stages = isEditing ? (stagesQuery.data ?? []) : (createStagesQuery.data ?? []);
+  const competition = isEditing ? detailQuery.data?.competition : scopeCompetitionId;
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
+    if (!competition) {
+      setError("Seleccioná una competición para guardar el evento.");
+      return;
+    }
     const payload: EventWritePayload = {
-      ...values,
+      competition,
+      phase: values.phase,
+      event_number: values.event_number,
+      name: values.name,
+      workout: values.workout,
       description: values.description || "",
+      is_ascending: values.is_ascending,
+      is_active: values.is_active,
     };
     if (isEditing && id) payload.id = Number(id);
 
@@ -186,30 +170,20 @@ export default function EventFormPage() {
         >
           <div className="flex flex-col gap-4">
             <div>
-              <label htmlFor="competition_stage" className={labelClassName}>
-                Etapa
+              <label htmlFor="phase" className={labelClassName}>
+                Fase
               </label>
               <select
-                id="competition_stage"
-                {...register("competition_stage", { valueAsNumber: true })}
+                id="phase"
+                {...register("phase")}
                 className={inputClassName}
               >
-                <option value="0">Selecciona…</option>
-                {stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    {stageLabel(stage.stage_type)}
-                    {stage.order ? ` · Orden ${stage.order}` : ""}
-                  </option>
-                ))}
+                <option value="QUALIFIER">Qualifier</option>
+                <option value="FINAL">Final</option>
               </select>
-              {errors.competition_stage?.message && (
+              {errors.phase?.message && (
                 <p className="mt-1 text-xs text-error-600" role="alert">
-                  {errors.competition_stage.message}
-                </p>
-              )}
-              {stages.length === 0 && (
-                <p className="mt-1 text-xs text-gray-400">
-                  Esta competición aún no tiene etapas.
+                  {errors.phase.message}
                 </p>
               )}
             </div>
@@ -297,7 +271,7 @@ export default function EventFormPage() {
             <div className="mt-2 flex items-center gap-3">
               <button
                 type="submit"
-                disabled={saving || stages.length === 0}
+                disabled={saving}
                 className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
               >
                 {saving

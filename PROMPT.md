@@ -159,7 +159,7 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 - Idioma español. Tema claro (sin dark mode por ahora).
 
 **Excluye (NO tocar):**
-- **NO modificar el backend** (modelos, serializers, views, urls, permisos ni migraciones). Los endpoints usados son los que ya existen.
+- En el frontend **no se modifica el backend**; los cambios en Django los aplica el usuario manualmente. **Ya aplicados por el usuario (verificado en el backend):** (a) `Event` apunta **directo a `Competition`** con `phase` (`QUALIFIER`/`FINAL`) y el modelo/endpoint `CompetitionStage` fueron **eliminados**; (b) `finalist_slots` se movió a `EnabledCompetitionCategory` (por categoría, `0` = sin Final); (c) el leaderboard expone `event_results[]` como **lista de objetos** (`event_id`, `event_number`, `event_name`, `phase`, `result`, `event_rank`, `score`).
 - No inventar endpoints ni mockear datos en producción.
 - No i18n multi-idioma, no dark mode, no registro nuevo de usuarios (se usa el login JWT existente).
 - No gestión de horarios/heats/jueces.
@@ -187,8 +187,11 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 ## 6. Datos / DTOs
 
 - `Competition`: `id`, `name`, `description`, `competition_type` (`code`/`name`), `status` (`code`/`name`), `affiliation` (`id`, `name`, `city`, `state`, `country`), `location` (`id`, `name`, `address`, `city`, `state`, `country`, `latitude`, `longitude`), `year`, `start_date`, `end_date`, `slug`.
-- `Leaderboard`: `category` + `entries[]` (`rank`, `competitor_id`, `display_name`, `final_score`, `event_ranks[]`).
-- `WODs` (Eventos por etapa): `event_number`, `name`, `description`, `event_result_type`, `rank_direction`, `competition_stage`.
+- `EnabledCompetitionCategory` (categoría habilitada): `id`, `competition`, `competition_category`, `finalist_slots` (cuántos clasifican a la Final; `0` = sin Final). **`finalist_slots` ya NO vive en `Competition`** (se movió por pedido del usuario).
+- `Leaderboard`: `category` + `entries[]` (`rank`, `competitor_id`, `display_name`, `final_score`, `event_ranks[]`, `event_scores[]`, `event_results[]`).
+  - `event_results[]`: **objetos por WOD** (`event_id`, `event_number`, `event_name`, `phase`, `result`, `event_rank`, `score`). `result` es el tiempo (ej. `"03:20"`) o reps (ej. `"150"`); `event_rank`/`score` pueden ser `null` (fase sin dato). `event_ranks`/`event_scores` ya existen en el payload.
+- Leaderboard unificado: por categoría, entradas combinadas con referencias `qualifier`/`final` y `total_score = puntos qualifier + puntos final` (modelo aditivo).
+- `WODs` (Eventos oficiales): `id`, `competition`, `phase` (`QUALIFIER`/`FINAL`), `event_number`, `name`, `workout`, `description`, `is_ascending`, `is_active`. **No existe `competition_stage`** (el modelo fue eliminado; los eventos cuelgan directo de `competition` + `phase`).
 - Nota: el API referencia competiciones por **`id`** (los leaderboards usan `competition_id`); el `slug` existe en el modelo pero no es lookup del API.
 - `[COMPLETAR transformaciones/mocks de prueba]`
 
@@ -199,8 +202,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 | Acción | Método | URL | Auth | Notas |
 |--------|--------|-----|------|-------|
 | Listar competiciones / detalle | GET | `/api/v1/competitions/` y `/api/v1/competitions/{id}/` | Pública pendiente (hoy JWT) | Filtros: `competition_type`, `status`; búsqueda por nombre |
-| Stages de una competición | GET | `/api/v1/competition-stages/?competition={id}` | Pública pendiente (hoy JWT) | Para listar WODs por etapa |
-| Eventos/WODs de un stage | GET | `/api/v1/events/?competition_stage={id}` | Pública pendiente (hoy JWT) | `event_number`, `name`, `event_result_type`, `rank_direction` |
+| Categorías habilitadas de una competición | GET | `/api/v1/enabled-competition-categories/?competition={id}` | Pública pendiente (hoy JWT) | Incluye `finalist_slots` por categoría |
+| Eventos/WODs de una competición | GET | `/api/v1/events/?competition={id}&phase=QUALIFIER` (o `FINAL`) | Pública pendiente (hoy JWT) | Filtros: `competition`, `phase`. Campos: `event_number`, `name`, `workout`, `is_ascending`, `is_active`. Ya **no** existe `competition_stage` |
 | Leaderboard qualifier | GET | `/api/v1/leaderboards/competition/{id}/qualifier/` | **Pública** | Permite ver filtros/categorías del payload |
 | Leaderboard final | GET | `/api/v1/leaderboards/competition/{id}/final/` | **Pública** | Igual que qualifier |
 
@@ -208,12 +211,12 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 
 | Acción | Método | URL | Auth | Notas |
 |--------|--------|-----|------|-------|
-| Crear evento | POST | `/api/v1/events/` | JWT | Payload: `{ competition_stage: number, event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
+| Crear evento | POST | `/api/v1/events/` | JWT | Payload: `{ competition: number, phase: 'QUALIFIER' | 'FINAL', event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
 | Actualizar evento | PATCH | `/api/v1/events/{id}/` | JWT | Mismo payload (campos parciales) |
 | Eliminar evento | DELETE | `/api/v1/events/{id}/` | JWT | — |
 | Obtener evento | GET | `/api/v1/events/{id}/` | JWT | — |
 
-> Un evento se asocia a una **etapa** (`competition_stage`), no a la competición directamente. Para crearlo, primero se obtiene la etapa de la competición (`GET /api/v1/competition-stages/?competition={id}`) y se usa su `id` como `competition_stage`.
+> Un evento se asocia **directamente a la competición** por `competition` + `phase` (Qualifier/Final); **no existe** `competition_stage` (el modelo fue eliminado).
 
 ### Endpoints de escritura — Equipos
 
@@ -240,7 +243,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 - Nuevos (públicos, solo lectura):
   - `HomeIndex` (página `/`): pestañas Recientes/Todas + filtros de lista.
   - `CompetitionDetail` (página detalle): info general + mapa + WODs + leaderboards.
-  - Componentes auxiliares: `CompetitionCard`, `Tabs`, `StatusBadge`, `LeaderboardTable`, `LeaderboardFilters`, `WodList`, `LocationMap` (embed OSM gratuito), `EmptyState`.
+  - Componentes auxiliares: `CompetitionCard`, `Tabs`, `StatusBadge`, `CombinedLeaderboardTable` (leaderboard unificado Qualifier+Final), `LeaderboardFilters`, `WodList`, `LocationMap` (embed OSM gratuito), `EmptyState`.
+  - `CombinedLeaderboardTable`: cabecera 2 filas (`Pos. | Atleta | Qualifier | Final | Total`, cada fase agrupa sus columnas `Score N`). Cada celda de WOD muestra **puesto + puntos + time/reps** (ej. `1st · 100 pts` y debajo `03:20`): ordinal en inglés (`1st/2nd/3rd…`), colores top-3 (1º dorado, 2º plata, 3º bronce), y `-` cuando no hay datos en esa fase.
 - `api/`: cliente HTTP con endpoints de lectura pública y base URL por entorno (`VITE_API_URL`).
 - Panel `/admin`: no cambia en esta iteración (queda protegido con `RoleGuard`).
 - `[COMPLETAR hooks/stores/utils adicionales]`
@@ -258,6 +262,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 | Inicio público sin sesión | Cargar `/` sin token | Muestra recientes + pestaña "todas" |
 | Detalle competición | Ver detalle sin login | Info general, afiliación creadora, fechas, mapa, WODs y leaderboard |
 | Filtros de leaderboard | Cambiar etapa/categoría | Se reflejan en la tabla (qualifier/final y categorías del payload) |
+| Leaderboard celda enriquecida | Ver una celda de WOD | Muestra puesto + puntos + time/reps (ej. `1st · 100 pts` + `03:20`), con top-3 resaltado |
+| No clasificado | Atleta en qualifier sin final | Muestra `-` en los WODs/scores de Final y en Total |
 | Acceso admin sin sesión | Ir a `/admin/*` sin token | Redirige a login |
 | Estados vacíos | Competición sin WODs/leaderboard | Estado vacío claro, sin romper la página |
 | Responsive | Móvil/tablet/desktop | Layout correcto en los tres breakpoints |
@@ -277,16 +283,19 @@ Checklist verificable al terminar:
 - Filtros de leaderboard (etapa/categoría) funcionan.
 - `/admin/*` protegido (redirige a login sin sesión).
 - Solo español, tema claro.
-- No se tocó el backend (sin cambios en Django).
+- No se tocó el backend desde el frontend (los cambios `Event`→`competition`+`phase`, `finalist_slots` por categoría y `event_results[]` los aplica el usuario manualmente).
 
 ## 12. Observaciones / riesgos
 
 - **Públicos sin token (RESUELTO en frontend):** las páginas públicas llaman a los endpoints de lectura con `auth: false` (`src/api/public.ts`). Si el backend filtra competiciones por usuario autenticado (`get_queryset()`), el JWT **nunca** se adjunta en `/` ni en el detalle → se ven **todas las competiciones publicadas** sin importar el login.
 - **Admin scope (RESUELTO en frontend):** `CompetitionScopeSelect` auto-selecciona la primera competición si no hay selección previa (`useEffect` → `adminScopeStore.setCompetitionId`). Con ello `/admin/events` y `/admin/teams` cargan los datos de la competición asignada en vez de mostrar estados vacíos.
-- **DECISIÓN PENDIENTE (aplazada — se resuelve en otro momento):** el backend solo expone `leaderboards` con `AllowAny`; `competitions`, `competition-stages` y `events` requieren JWT por defecto. Para que `/` y el detalle sean consultables sin login hace falta o bien (a) abrir esos GET al público (cambio backend), o (b) exigir login también en las páginas públicas. **No implementar esta iteración; pendiente de decisión posterior.** Hasta entonces la spec asume acceso con JWT.
+- **DECISIÓN PENDIENTE (aplazada — se resuelve en otro momento):** el backend solo expone `leaderboards` con `AllowAny`; `competitions`, `enabled-competition-categories` y `events` requieren JWT por defecto. Para que `/` y el detalle sean consultables sin login hace falta o bien (a) abrir esos GET al público (cambio backend), o (b) exigir login también en las páginas públicas. **No implementar esta iteración; pendiente de decisión posterior.** Hasta entonces la spec asume acceso con JWT.
 - Mapa: se propone **embed de OpenStreetMap** (gratis, sin API key) con `latitude`/`longitude` de `Location`. Google Maps Embed requiere API key.
 - El API referencia competiciones por `id` (no por `slug`), aunque el modelo tenga `slug`: usar rutas por id o plantear cambio a lookup por slug en el backend.
 - Estados vacíos: definir qué se muestra cuando una competición no tiene WODs, leaderboard o está en `DRAFT`/`CANCELLED` (público probablemente solo `PUBLISHED`/`FINISHED`).
+- **Cambio de fases/etapas → competition + phase (RESUELTO en backend, usuario):** el modelo `CompetitionStage` fue eliminado; `Event` cuelga directo de `Competition` con `phase` (`QUALIFIER`/`FINAL`). `EnabledCompetitionCategory.finalist_slots` define cuántos pasan a la Final por categoría. Los endpoints `/api/v1/competition-stages/` y los filtros `competition_stage*` **ya no existen**; usar `/api/v1/events/?competition={id}&phase=...`.
+- **`event_results[]` ya en el payload (RESUELTO en backend, usuario):** el serializer del leaderboard devuelve por WOD un objeto `{event_id, event_number, event_name, phase, result, event_rank, score}`. El frontend lo consume directo; si un campo no llega, se renderiza `-`.
+- **Ordinales en inglés y top-3 (decisión de UI):** puesto por WOD como `1st/2nd/3rd…` (inglés) con los 3 primeros resaltados (dorado/plata/bronce).
 
 ---
 

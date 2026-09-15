@@ -33,7 +33,7 @@ Implementación de las **vistas públicas de Scorely** (spec Parte II de `PROMPT
 - `Tabs`, `Badge`, `StatusBadge` (español + tonos), `Spinner`, `ErrorState` (con Reintentar), `EmptyState`.
 
 ## Paso 6 — Componentes públicos (COMPLETADO)
-- `CompetitionCard`, `LocationMap` (embed OSM, sin API key), `WodList` (tabla), `LeaderboardTable` (pos/atletas/eventos/puntuación), `LeaderboardFilters` (selector de categoría). `utils/format.ts` (fechas es-ES), `utils/cn.ts`.
+- `CompetitionCard`, `LocationMap` (embed OSM, sin API key), `WodList` (tabla), `CombinedLeaderboardTable` (leaderboard unificado Qualifier+Final, total aditivo), `LeaderboardFilters` (selector de categoría). `utils/format.ts` (fechas es-ES), `utils/cn.ts`, `utils/leaderboard.ts` (`combineLeaderboards`).
 
 ## Paso 7 — Página HomeIndex `/` (COMPLETADO)
 - Pestañas **Recientes** (orden por `start_date` desc, slice 6) / **Todas**, búsqueda por nombre con debounce (query param `search`), grid responsive de tarjetas, estados carga/error/vacío.
@@ -121,3 +121,65 @@ Problema reportado por el usuario:
 - `npm run test` → **31/31** en verde (7 archivos)
 - `npm run build` → OK
 - Cobertura manual: con sesión, `/admin/competitions`, eventos y equipos muestran solo las competiciones asignadas al usuario; `/` público sigue mostrando todas las publicadas.
+
+## Paso 18 — Leaderboard unificado Qualifier + Final (COMPLETADO)
+
+Requerimiento del usuario: en `/competitions/:slug/`, una sola tabla de leaderboard por categoría con modelo aditivo (`Total = qualifier + final`). Decisiones: los no clasificados muestran `-` en la fase final (sin puntos); si una fase aún no tiene datos, muestra `-`. Cabecera pedida:
+```
+Pos. │ Atleta │ Qualifier (Score 1..N) │ Final (Score 1..N) │ Total
+```
+
+- `src/types/index.ts`: DTOs `CombinedLeaderboardEntry` (`qualifier`/`final: LeaderboardEntry | null`, `total_score`) y `CombinedLeaderboard`.
+- `src/utils/leaderboard.ts` (nuevo): `combineLeaderboards(qualifier, final)` — join por categoría/`competitor_id`, `total_score` aditivo, orden: finalistas primero (total desc) → no clasificados (qualifier desc), rank recalculado, unión de categorías.
+- `src/components/public/CombinedLeaderboardTable.tsx` (nuevo): reemplaza a `LeaderboardTable` (eliminado). Cabecera 2 filas (Pos./Atleta/Total rowSpan=2; `Qualifier`/`Final` colSpan por WODs con `Score N` por columna). Celdas `-` para fase sin datos por atleta y para etapas sin WODs.
+- `src/pages/public/CompetitionDetail.tsx`: eliminadas pestañas `Tabs`/`STAGE_TABS`/`stageTab` del leaderboard; usa `qualifierQuery`+`finalQuery` juntos → `combineLeaderboards(...)`; pasa `qualifierWods`/`finalWods` (vía `pickStageFor` + `eventsByStage`); filtro de categoría sobre las categorías unidas; loading/error combinados de ambos queries.
+- Tests: `tests/leaderboardCombine.test.ts` (nuevo, 5) y `tests/CompetitionDetail.test.tsx` adaptado (2 etapas, total 500, `-` en no clasificado, filtro de categoría).
+
+Verificación: `npm run lint` → OK (0 errores, 1 warning preexistente `SidebarContext.tsx`); `npm run typecheck` → OK; `npm run test` → **36/36** (8 archivos); `npm run build` → OK.
+
+## Paso 19 — Refactor backend (Event→competition+phase, CompetitionStage eliminado) y sincronización de docs (COMPLETADO)
+
+> Cambios de backend aplicados por el usuario en `leader\Scorely`, verificados contra el backend real.
+
+### Backend (verificado)
+- **`Event`** ahora cuelga de `competition` + `phase` (`QUALIFIER`/`FINAL`); el modelo `CompetitionStage` fue **eliminado** (migración `events/0006` reescrita con backfill de `competition_id`/`phase`; duplicado buggy `0006_..._.py` borrado). Constraint único: `(competition, phase, event_number)` → `unique_event_number_per_phase`.
+- **`finalist_slots`** se movió de `Competition` a `EnabledCompetitionCategory` (por categoría; migraciones `events/0007` + `competitions/0005`). Backfill verificado: cf_a 2/2/2, cf_b 2, hy_a/hy_b 0.
+- **`event_results[]`** del leaderboard ahora es lista de **objetos** `{event_id, event_number, event_name, phase, result, event_rank, score}`.
+- Backend: `makemigrations --check --dry-run` limpio; `migrate` OK; **120/120** tests (`pytest -q` en `Scorely\.venv`).
+
+### Frontend/docs (cambios aplicados)
+- `PROMPT.md`: sección 3 (Excluye), 6 (DTOs: `EnabledCompetitionCategory.finalist_slots`, `event_results[]` objetos, `WODs` con `competition`+`phase` sin `competition_stage`), 7 (endpoints: `enabled-competition-categories/?competition={id}`, `events/?competition&phase`, payload de eventos con `competition`+`phase`; eliminadas filas de `competition-stages`), 11 y 12 (criterio de aceptación y observaciones alineados).
+- `PLAN.md`: payloads y flujo de creación de eventos actualizados a `competition`+`phase`; nota sobre el refactor añadida.
+- `RESULTADOS.md`: iteración 2026-09-15 documentada (ver abajo).
+
+### Verificación
+- `npm run lint` → OK
+- `npm run typecheck` → OK
+- `npm run test` → **36/36**
+- `npm run build` → OK
+
+## Paso 20 — Refactor del código fuente del frontend al nuevo modelo (COMPLETADO)
+
+> Eliminadas todas las referencias a `competition-stages`/`competition_stage`/`CompetitionStage` del código fuente del frontend (antes el usuario reportaba HTTP 404 en la tabla de eventos pública, al editar eventos/competiciones y en el leaderboard porque el frontend seguía llamando al endpoint `/competition-stages/` ya eliminado).
+
+### Causa raíz (corregida)
+El frontend consumía el modelo viejo: `getCompetitionStages` → `/competition-stages/` (404), eventos filtrados por `competition_stage__competition` y `competition_stage` (404), formularios con select de etapas, y combinaba leaderboards qualifier+final. El backend (Paso 19) ya no expone `CompetitionStage`.
+
+### Cambios aplicados
+- **`src/types/index.ts`**: eliminado `CompetitionStage`; nuevos `EventPhase` (`QUALIFIER`/`FINAL`), `EventWod`/`EventWritePayload` con `competition`+`phase`, `EventResult`, `EnabledCompetitionCategory` (`finalist_slots`), `CombinedLeaderboardEntry` con `event_results[]` + `qualified`.
+- **`src/api/public.ts`**: eliminados `getCompetitionStages`/`normalizeStages`; `getEvents(competitionId, phase?)` → `/events/?competition&page_size&phase`; nuevo `getEnabledCompetitionCategories` → `/enabled-competition-categories/?competition`.
+- **`src/api/admin.ts`**: eliminados `fetchStages`/`fetchStage`; `fetchEvents` → `/events/?competition`; nuevo `fetchEnabledCompetitionCategories`.
+- **Hooks**: eliminado `useCompetitionStages.ts` y `useAdminStages`; `useEvents(competitionId, phase)`; nuevo `useEnabledCompetitionCategories`.
+- **`CompetitionDetail.tsx`**: eventos por fase, leaderboard **overall** (`/final/`), `WodList` por fase (`Qualifier`/`Final`).
+- **`utils/leaderboard.ts`**: `combineLeaderboards` → `buildCombinedLeaderboards(overall)` basado en `event_results[]` con `phase`; `qualified` = tiene resultado FINAL; total aditivo desde `final_score`.
+- **`CombinedLeaderboardTable.tsx`**: puntajes por WOD desde `event_results` (por `event_id`), detalle `#rang · resultado`, `-` para no finalistas.
+- **`WodList.tsx`**: prop `stageName` → `phaseName`.
+- **Admin**: `EventsPage` (columna `Fase`, orden fase+número) y `EventFormPage` (select `Fase` `QUALIFIER`/`FINAL`, payload `{competition, phase, ...}`).
+- **Tests**: fixtures/sin `makeStage`; `publicApi.test` (getEvents/getEnabledCompetitionCategories), `leaderboardCombine.test` (buildCombinedLeaderboards), `CompetitionDetail.test` (overall + por fase), `WodList.test` (phaseName).
+
+### Verificación
+- Endpoints reales: `GET /api/v1/events/?competition=8&page_size=50` → **200** (1 evento); `GET /api/v1/leaderboards/competition/8/final/` → **200** (entradas con `event_results[]` incluyendo `phase`/`result`/`event_rank`/`score`). Ya no se llama a `/competition-stages/`.
+- `npm run lint` → OK (0 errores)
+- `npm run typecheck` → OK
+- `npm run test` → **39/39**
+- `npm run build` → OK

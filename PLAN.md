@@ -16,6 +16,7 @@
 | B | `/admin/events` muestra **"Sin eventos"** (estado vacío) aun teniendo una competición asignada. Las queries nunca se ejecutan porque `competitionId` es `null` en el store. | `src/components/admin/CompetitionScopeSelect.tsx` |
 | C | `/admin/teams` muestra **"Sin equipos"** (mismo motivo que B). | `src/components/admin/CompetitionScopeSelect.tsx` |
 | D | `PROMPT.md` no documenta los endpoints de **creación** de eventos y equipos. | `PROMPT.md` |
+| E | La documentación (`PLAN.md`, `Process.md`, `RESULTADOS.md`) quedó con referencias viejas a `competition_stage` tras el refactor del backend. | `PLAN.md`, `Process.md`, `RESULTADOS.md` |
 
 ---
 
@@ -142,12 +143,12 @@ useEffect(() => {
 
 | Acción | Método | URL | Auth | Payload |
 |--------|--------|-----|------|---------|
-| Crear evento | POST | `/api/v1/events/` | JWT | `{ competition_stage: number, event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
+| Crear evento | POST | `/api/v1/events/` | JWT | `{ competition: number, phase: 'QUALIFIER' \| 'FINAL', event_number: number, name: string, workout: string, description?: string, is_ascending: boolean, is_active: boolean }` |
 | Actualizar evento | PATCH | `/api/v1/events/{id}/` | JWT | Mismo payload (campos parciales) |
 | Eliminar evento | DELETE | `/api/v1/events/{id}/` | JWT | — |
 | Obtener evento | GET | `/api/v1/events/{id}/` | JWT | — |
 
-**Nota sobre `competition_stage`**: El evento se asocia a una **etapa** (stage), no directamente a una competición. Para crear un evento, primero se debe obtener la etapa de la competición (`GET /api/v1/competition-stages/?competition={id}`) y luego usar su `id` como `competition_stage` en el payload.
+**Nota (refactor 2026-09-15)**: el modelo `CompetitionStage` fue **eliminado** del backend. Un evento se asocia directamente a la **competición** por `competition` + `phase` (`QUALIFIER`/`FINAL`); ya no existe `competition_stage`. `finalist_slots` (cuántos clasifican a la Final) vive ahora en `EnabledCompetitionCategory`, no en `Competition`.
 
 #### Equipos
 
@@ -217,8 +218,9 @@ Ejecutar en orden:
 **Payload requerido**:
 ```json
 {
-  "competition_stage": 1,       // ID de la etapa (obligatorio)
-  "event_number": 1,            // Número del evento dentro de la etapa (obligatorio, >= 1)
+  "competition": 1,             // ID de la competición (obligatorio)
+  "phase": "QUALIFIER",         // "QUALIFIER" | "FINAL" (obligatorio)
+  "event_number": 1,            // Número del evento dentro de la fase (obligatorio, >= 1)
   "name": "Fran",               // Nombre del WOD (obligatorio)
   "workout": "21-15-9...",      // Descripción del workout (obligatorio)
   "description": "Opcional...",  // Descripción adicional (opcional)
@@ -228,7 +230,8 @@ Ejecutar en orden:
 ```
 
 **Campos del formulario** (`EventFormPage.tsx`):
-- `competition_stage`: select de etapas (cargadas de `GET /competition-stages/?competition={id}`)
+- `competition`: se toma automáticamente de `adminScopeStore.competitionId`
+- `phase`: select de fases (`QUALIFIER` | `FINAL`)
 - `event_number`: input numérico (mínimo 1)
 - `name`: input texto
 - `workout`: textarea
@@ -238,10 +241,9 @@ Ejecutar en orden:
 
 **Flujo de creación**:
 1. Usuario selecciona competición en `CompetitionScopeSelect`
-2. Se cargan las etapas de esa competición (`fetchStages(competitionId)`)
-3. Usuario completa el formulario y selecciona una etapa
-4. Se envía `POST /events/` con el payload
-5. Se invalida la query `["admin", "events", competitionId]` para refrescar la lista
+2. Usuario completa el formulario con fase y número de evento
+3. Se envía `POST /events/` con `{ competition, phase, ... }`
+4. Se invalida la query `["admin", "events", competitionId]` para refrescar la lista
 
 ### Creación de equipos
 

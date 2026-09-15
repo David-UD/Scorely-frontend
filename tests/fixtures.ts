@@ -1,4 +1,4 @@
-import type { Competition, CompetitionStage, Leaderboard, EventWod } from "@/types";
+import type { Competition, Leaderboard, EventWod, EventResult, EventPhase } from "@/types";
 
 export function makeCompetition(overrides: Partial<Competition> = {}): Competition {
   return {
@@ -32,19 +32,11 @@ export function makeCompetition(overrides: Partial<Competition> = {}): Competiti
   };
 }
 
-export function makeStage(overrides: Partial<CompetitionStage> = {}): CompetitionStage {
-  return {
-    id: 1,
-    competition: 1,
-    name: "Qualifier",
-    ...overrides,
-  };
-}
-
 export function makeWod(overrides: Partial<EventWod> = {}): EventWod {
   return {
     id: 1,
-    competition_stage: 1,
+    competition: 1,
+    phase: "QUALIFIER" as EventPhase,
     event_number: 1,
     name: "Fran",
     workout: "21-15-9\nThrusters 43kg\nPull-ups",
@@ -55,29 +47,50 @@ export function makeWod(overrides: Partial<EventWod> = {}): EventWod {
   };
 }
 
+export function makeEventResult(overrides: Partial<EventResult> = {}): EventResult {
+  return {
+    event_id: 1,
+    event_number: 1,
+    event_name: "Fran",
+    phase: "QUALIFIER" as EventPhase,
+    result: "06:12",
+    event_rank: 1,
+    score: 100,
+    ...overrides,
+  };
+}
+
 export function makeLeaderboard(
   overrides: Partial<Leaderboard> = {},
 ): Leaderboard {
   return {
     competition_id: 1,
-    stage: "qualifier",
+    stage: "final",
     category: { code: "rx", name: "RX" },
     entries: [
       {
         rank: 1,
         competitor_id: 10,
         display_name: "Ana López",
-        final_score: "03:20",
-        event_ranks: [1, 2],
-        event_scores: [100, 94],
+        final_score: "200",
+        event_ranks: [1, 1],
+        event_scores: [100, 100],
+        event_results: [
+          makeEventResult({ event_id: 1, event_number: 1, phase: "QUALIFIER", score: 100 }),
+          makeEventResult({ event_id: 2, event_number: 2, phase: "FINAL", score: 100 }),
+        ],
       },
       {
         rank: 2,
         competitor_id: 11,
         display_name: "Luis Pérez",
-        final_score: "03:45",
-        event_ranks: [2, 1],
+        final_score: "194",
+        event_ranks: [2, 2],
         event_scores: [94, 100],
+        event_results: [
+          makeEventResult({ event_id: 1, event_number: 1, phase: "QUALIFIER", score: 94, event_rank: 2 }),
+          makeEventResult({ event_id: 2, event_number: 2, phase: "FINAL", score: 100, event_rank: 2 }),
+        ],
       },
     ],
     ...overrides,

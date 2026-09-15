@@ -1,14 +1,14 @@
 import type { EventWod } from "@/types";
 import EmptyState from "@/components/common/EmptyState";
 
-export default function WodList({ stageName, wods }: { stageName: string; wods: EventWod[] }) {
+export default function WodList({ phaseName, wods }: { phaseName: string; wods: EventWod[] }) {
   const visibleWods = wods.filter((wod) => wod.is_active !== false);
 
   if (visibleWods.length === 0) {
     return (
       <EmptyState
-        title={`Sin workouts en ${stageName}`}
-        description="No hay eventos registrados para esta etapa todavía."
+        title={`Sin workouts en ${phaseName}`}
+        description="No hay eventos registrados para esta fase todavía."
       />
     );
   }

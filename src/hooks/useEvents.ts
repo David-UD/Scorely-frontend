@@ -1,10 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { getEvents } from "@/api/public";
+import type { EventPhase } from "@/types";
 
-export function useEvents(stageId: number | string | undefined) {
+export function useEvents(
+  competitionId: number | string | undefined,
+  phase?: EventPhase,
+) {
   return useQuery({
-    queryKey: ["events", stageId],
-    queryFn: () => getEvents(stageId as number | string),
-    enabled: stageId !== undefined && stageId !== null && stageId !== "",
+    queryKey: ["events", competitionId, phase],
+    queryFn: () => getEvents(competitionId as number | string, phase),
+    enabled:
+      competitionId !== undefined &&
+      competitionId !== null &&
+      competitionId !== "",
   });
 }

@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   useAdminEvents,
-  useAdminStages,
   useDeleteEvent,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
@@ -11,28 +10,16 @@ import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
-import { stageLabel } from "@/utils/format";
+import { phaseLabel } from "@/utils/format";
 
 export default function EventsPage() {
   const navigate = useNavigate();
   const competitionId = useAdminScopeStore((s) => s.competitionId);
   const eventsQuery = useAdminEvents(competitionId);
-  const stagesQuery = useAdminStages(competitionId);
   const deleteMutation = useDeleteEvent(competitionId);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const stageNames = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const stage of stagesQuery.data ?? []) {
-      map.set(
-        stage.id,
-        `${stageLabel(stage.stage_type)}${stage.order ? ` · Orden ${stage.order}` : ""}`,
-      );
-    }
-    return map;
-  }, [stagesQuery.data]);
-
-  if (eventsQuery.isLoading || (competitionId && stagesQuery.isLoading)) {
+  if (eventsQuery.isLoading) {
     return <Spinner label="Cargando eventos…" />;
   }
 
@@ -46,7 +33,9 @@ export default function EventsPage() {
   }
 
   const events = (eventsQuery.data ?? []).sort(
-    (a, b) => (stageNames.get(a.competition_stage) ?? "") < (stageNames.get(b.competition_stage) ?? "") ? -1 : 1
+    (a, b) =>
+      a.phase.localeCompare(b.phase, "es") ||
+      a.event_number - b.event_number,
   );
 
   const handleDelete = (id: number, name: string) => {
@@ -86,7 +75,7 @@ export default function EventsPage() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
-                    Etapa
+                    Fase
                   </th>
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
                     Nº
@@ -112,7 +101,7 @@ export default function EventsPage() {
                 {events.map((event) => (
                   <tr key={event.id}>
                     <td className="px-5 py-4 text-gray-500">
-                      {stageNames.get(event.competition_stage) ?? "—"}
+                      {phaseLabel(event.phase)}
                     </td>
                     <td className="px-5 py-4 font-medium text-gray-800">
                       {event.event_number}

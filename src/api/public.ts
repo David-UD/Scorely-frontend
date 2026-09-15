@@ -2,7 +2,8 @@ import { request, buildQuery, ApiError, type QueryParams } from "./client";
 import type {
   CategoryRef,
   Competition,
-  CompetitionStage,
+  EnabledCompetitionCategory,
+  EventPhase,
   EventWod,
   Leaderboard,
   LeaderboardEntry,
@@ -47,53 +48,27 @@ export async function getCompetition(id: number | string): Promise<Competition> 
   return request<Competition>(`/competitions/${id}/`, { auth: false });
 }
 
-export async function getCompetitionStages(
+export async function getEvents(
   competitionId: number | string,
-): Promise<CompetitionStage[]> {
-  const data = await request<unknown>(
-    `/competition-stages/${buildQuery({ competition: competitionId })}`,
+  phase?: EventPhase,
+): Promise<EventWod[]> {
+  const params: Record<string, string | number> = {
+    competition: competitionId,
+    page_size: 100,
+  };
+  if (phase) params.phase = phase;
+  const data = await request<EventWod[] | Page<EventWod>>(
+    `/events/${buildQuery(params)}`,
     { auth: false },
   );
-  return normalizeStages(data);
+  return unwrapList(data);
 }
 
-interface RawStage {
-  id: number;
-  competition: number;
-  stage_type?: string;
-  qualification_count?: number;
-  order?: number;
-  name?: string;
-  code?: string;
-}
-
-function toStage(raw: RawStage): CompetitionStage {
-  const code = (raw.stage_type ?? raw.code ?? "").toLowerCase();
-  return {
-    id: raw.id,
-    competition: raw.competition,
-    name: raw.name ?? "",
-    code,
-  };
-}
-
-function normalizeStages(data: unknown): CompetitionStage[] {
-  let blocks: RawStage[] = [];
-  if (Array.isArray(data)) {
-    blocks = data as RawStage[];
-  } else if (
-    data &&
-    typeof data === "object" &&
-    Array.isArray((data as Page<RawStage>).results)
-  ) {
-    blocks = (data as Page<RawStage>).results;
-  }
-  return blocks.map(toStage);
-}
-
-export async function getEvents(stageId: number | string): Promise<EventWod[]> {
-  const data = await request<EventWod[] | Page<EventWod>>(
-    `/events/${buildQuery({ competition_stage: stageId })}`,
+export async function getEnabledCompetitionCategories(
+  competitionId: number | string,
+): Promise<EnabledCompetitionCategory[]> {
+  const data = await request<EnabledCompetitionCategory[] | Page<EnabledCompetitionCategory>>(
+    `/enabled-competition-categories/${buildQuery({ competition: competitionId })}`,
     { auth: false },
   );
   return unwrapList(data);

@@ -8,21 +8,11 @@ import {
   deleteTeam,
   fetchAthletes,
   fetchEvents,
-  fetchStages,
   fetchTeams,
   updateAthlete,
   updateEvent,
   updateTeam,
 } from "@/api/admin";
-
-export function useAdminStages(competitionId: number | null) {
-  return useQuery({
-    queryKey: ["admin", "stages", competitionId],
-    queryFn: () => fetchStages(competitionId as number),
-    enabled: Boolean(competitionId),
-    staleTime: 30_000,
-  });
-}
 
 export function useAdminEvents(competitionId: number | null) {
   return useQuery({

@@ -15,14 +15,14 @@ export function formatBirthDate(iso?: string): string {
   return formatDate(iso);
 }
 
-export function stageLabel(stageType?: string): string {
-  if (!stageType) return "—";
-  const key = stageType.toLowerCase();
+export function phaseLabel(phase?: string): string {
+  if (!phase) return "—";
+  const key = phase.toLowerCase();
   const labels: Record<string, string> = {
     qualifier: "Qualifier",
     final: "Final",
   };
-  return labels[key] ?? stageType;
+  return labels[key] ?? phase;
 }
 
 export function formatDateRange(startDate: string, endDate?: string): string {

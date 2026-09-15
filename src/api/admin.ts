@@ -4,10 +4,10 @@ import type {
   Athlete,
   AthleteWritePayload,
   Competition,
-  CompetitionStage,
   CompetitionStatus,
   CompetitionType,
   CompetitionWritePayload,
+  EnabledCompetitionCategory,
   EventWod,
   EventWritePayload,
   Location,
@@ -71,18 +71,14 @@ export async function deleteCompetition(id: number): Promise<void> {
   await request<void>(`/competitions/${id}/`, { method: "DELETE" });
 }
 
-// ── Stages ───────────────────────────────────────────────────────────────────
+// ── Competition categories ───────────────────────────────────────────────────
 
-export async function fetchStages(
+export async function fetchEnabledCompetitionCategories(
   competitionId: number,
-): Promise<CompetitionStage[]> {
-  return fetchCatalog<CompetitionStage>(
-    `/competition-stages/?competition=${competitionId}&page_size=100`,
+): Promise<EnabledCompetitionCategory[]> {
+  return fetchCatalog<EnabledCompetitionCategory>(
+    `/enabled-competition-categories/?competition=${competitionId}&page_size=100`,
   );
-}
-
-export async function fetchStage(id: number): Promise<CompetitionStage> {
-  return request<CompetitionStage>(`/competition-stages/${id}/`);
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────
@@ -91,7 +87,7 @@ export async function fetchEvents(
   competitionId: number,
 ): Promise<EventWod[]> {
   return fetchCatalog<EventWod>(
-    `/events/?competition_stage__competition=${competitionId}&page_size=100`,
+    `/events/?competition=${competitionId}&page_size=100`,
   );
 }
 

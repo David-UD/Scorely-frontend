@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { getCompetitionStages } from "@/api/public";
+import { getEnabledCompetitionCategories } from "@/api/public";
 
-export function useCompetitionStages(
+export function useEnabledCompetitionCategories(
   competitionId: number | string | undefined,
   enabled = true,
 ) {
   return useQuery({
-    queryKey: ["competition-stages", competitionId],
-    queryFn: () => getCompetitionStages(competitionId as number | string),
+    queryKey: ["enabled-competition-categories", competitionId],
+    queryFn: () => getEnabledCompetitionCategories(competitionId as number | string),
     enabled:
       enabled &&
       competitionId !== undefined &&
