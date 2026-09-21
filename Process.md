@@ -292,3 +292,34 @@ El frontend consumía el modelo viejo: `getCompetitionStages` → `/competition-
 - `npm run typecheck` → OK
 - `npm run test` → **39/39**
 - `npm run build` → OK
+
+## Paso 25 — Módulo admin "Filiaciones" / Parte II-C (COMPLETADO)
+
+> Implementación de la **Parte II-C** de `PROMPT.md` según `PLAN.md` (sin tocar el backend).
+
+### Reglas de negocio implementadas
+- **Superadmin**: CRUD del catálogo de filiaciones (`Affiliation`: `name`, `city`, `state`, `country` obligatorios; `description`/`logo` opcionales —solo `description` en el frontend, el logo se deja para el file‑upload futuro) en `/admin/affiliations` (nuevo `/admin/affiliations/new`, `/admin/affiliations/:id/edit`).
+- Restricción de roles en **frontend**: `AffiliationsPage`/`AffiliationFormPage` bloquean si no es superadmin y `src/api/admin.ts` lanza error en las escrituras si `user.is_superuser` es falso (`assertSuperUser`).
+- **Borrado en uso**: `Competition.affiliation` usa `on_delete=PROTECT` → `DELETE` de una filiación referenciada devuelve error; la UI muestra un banner claro ("Puede estar en uso por competiciones").
+
+### Cambios aplicados
+- **`src/types/index.ts`**: `Affiliation` ampliado (`description?: string`, `logo?: string | null`) y nuevo `AffiliationWritePayload` (`id?`, `name`, `city`, `state`, `country`, `description?`).
+- **`src/api/admin.ts`**: `fetchAffiliations()` (`/affiliations/?page_size=100`, reutilizada en `getAdminCatalogs()`), `fetchAffiliation(id)`, `createAffiliation`, `updateAffiliation`, `deleteAffiliation` (las 3 de escritura con `assertSuperUser()`); mensaje de `assertSuperUser` generalizado a "No tenés permisos para realizar esta acción.".
+- **`src/hooks/useAdminModules.ts`**: `useAdminAffiliations`, `useCreateAffiliation`, `useUpdateAffiliation`, `useDeleteAffiliation` (invalidan `["admin","affiliations"]`); retirado el import de `fetchAffiliation` (se usa directo desde el formulario).
+- **`src/pages/admin/AffiliationsPage.tsx`** (nuevo): tabla Nombre/Ciudad/Estado/País/Acciones, botón "Nueva filiación", confirm en borrado + manejo de `ApiError` con banner, gate superadmin, estados Spinner/ErrorState/EmptyState.
+- **`src/pages/admin/AffiliationFormPage.tsx`** (nuevo): react-hook-form + zod (`name/city/state/country` requeridos, `description` opcional), create/edit (carga con `fetchAffiliation(Number(id))`), captura de `ApiError`, gate superadmin.
+- **`src/components/admin/icons.tsx`**: nuevo `BuildingIcon` (patrón `StrokeIcon`).
+- **`src/components/admin/AdminSidebar.tsx`**: ítem "Filiaciones" (`GroupIcon`→`BuildingIcon`) sumado al spread condicional `...(isSuperUser ? [...] : [])`.
+- **`src/App.tsx`**: rutas `/admin/affiliations`, `/admin/affiliations/new`, `/admin/affiliations/:id/edit`.
+
+### Tests
+- `tests/fixtures.ts`: `makeAffiliation(overrides)`.
+- `tests/adminApi.test.ts`: 15 casos (nuevo bloque "affiliations catalog": bloqueo no-superadmin, LIST, POST, PATCH, DELETE).
+- `tests/AffiliationsPage.test.tsx` (nuevo, 5): loading, tabla superadmin, sin acceso para admin, vacío, **error al borrar filiación en uso** (stub de `confirm` + `onError`).
+- Fix de tests preexistentes: `tests/CompetitionDetail.test.tsx` esperaba `z=16` en el mapa, pero `LocationMap.tsx` (ya commiteado) usa `TARGET_ZOOM = 19` → assertions alineadas a `z=19`.
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **70/70** (11 archivos)
+- `npm run build` → OK

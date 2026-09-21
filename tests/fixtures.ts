@@ -1,4 +1,5 @@
 import type {
+  Affiliation,
   Competition,
   CompetitionCategory,
   EnabledCompetitionCategory,
@@ -7,6 +8,19 @@ import type {
   EventResult,
   EventPhase,
 } from "@/types";
+
+export function makeAffiliation(overrides: Partial<Affiliation> = {}): Affiliation {
+  return {
+    id: 1,
+    name: "Box El Pilar",
+    description: "",
+    logo: null,
+    city: "Buenos Aires",
+    state: "Buenos Aires",
+    country: "Argentina",
+    ...overrides,
+  };
+}
 
 export function makeCompetitionCategory(
   overrides: Partial<CompetitionCategory> = {},

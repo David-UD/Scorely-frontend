@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useSidebar } from "./SidebarContext";
 import { useAuthStore } from "@/store/authStore";
 import {
+  BuildingIcon,
   ChartIcon,
   ChevronDownIcon,
   DotsIcon,
@@ -45,6 +46,12 @@ export default function AdminSidebar() {
             name: "Categorías",
             icon: <GroupIcon />,
             path: "/admin/categories",
+            enabled: true,
+          },
+          {
+            name: "Filiaciones",
+            icon: <BuildingIcon />,
+            path: "/admin/affiliations",
             enabled: true,
           },
         ]

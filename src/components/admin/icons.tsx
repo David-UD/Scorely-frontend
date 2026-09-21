@@ -42,6 +42,15 @@ export function TrophyIcon({ className }: IconProps) {
   );
 }
 
+export function BuildingIcon({ className }: IconProps) {
+  return (
+    <StrokeIcon className={className}>
+      <path d="M3 21h18M6 21V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15" />
+      <path d="M4 21h16M9 8h2M10 21v-3h2v3M13.5 8h1.5" />
+    </StrokeIcon>
+  );
+}
+
 export function ListIcon({ className }: IconProps) {
   return (
     <StrokeIcon className={className}>

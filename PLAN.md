@@ -1,223 +1,229 @@
-# PLAN — Módulo admin "Categorías disponibles" (Parte II-B de `PROMPT.md`)
+# PLAN — Ejecución de `PROMPT.md` (Scorely Frontend)
 
-> **No ejecuta cambios**: describe, paso a paso, cómo implementar el módulo
-> de administración de **categorías disponibles** en el panel admin de
-> `Scorely-frontend/`, tal como se especifica en la **Parte II-B** de `PROMPT.md`.
+> **Documento de planificación, no ejecuta cambios.** Describe, paso a paso,
+> cómo implementar todo lo indicado en `PROMPT.md` (Partes II-B, II-C y II)
+> sobre `Scorely-frontend/`, indicando el **estado actual** de cada parte y
+> detallando el trabajo **pendiente**.
 >
-> Fecha: 2026-09-15
-> Estado: **BORRADOR / pendiente de ejecución**
+> Fecha: 2026-09-21
+> Estado: BORRADOR / pendiente de ejecución (Parte II-C sin implementar)
 
 ---
 
-## 0. Resumen del objetivo
+## 0. Alcance del plan
+
+`PROMPT.md` contiene **tres** especificaciones de actualización del frontend:
+
+| Sección                                    | Módulo | Estado |
+|--------------------------------------------|--------|--------|
+| **Parte II-B** — Categorías disponibles    | Admin (`/admin/categories` + `/admin/competition-categories`) | ✅ **COMPLETADO** (ver `Process.md` Paso 21 y `RESULTADOS.md` iteración 2026-09-15; commits `2161c79`) |
+| **Parte II** — Pantalla pública con información del sistema | Público (`/`, `/competitions/:slug/`, leaderboards) | ✅ **COMPLETADO** (ver `Process.md` Pasos 0–24 y `RESULTADOS.md`; commits `0565eb1`…`bf7d27f`) |
+| **Parte II-C** — Filiaciones (`Affiliation`) | Admin (`/admin/affiliations`) | ⏳ **PENDIENTE** (objeto de este plan) |
+
+Este plan:
+1. Documenta el **estado alcanzado** de las partes ya implementadas (para que el
+   ejecutor sepa qué existe y no lo rehaga).
+2. Detalla **paso a paso** la implementación de la **Parte II-C (Filiaciones)**,
+   única sección de `PROMPT.md` aún sin ejecutar.
+3. Incluye los pasos de **verificación** de todo el proyecto (lint/typecheck/test/build).
+
+### Regla clave repetida de `PROMPT.md`
+- **Quién crea/edita/elimina filiaciones = superadmin** (`user.is_superuser`). El
+  admin de competición **NO** accede a `/admin/affiliations`. La restricción se
+  implementa **en frontend** (ocultar menú + guard de escritura) porque el backend
+  hoy expone `affiliations/` con permiso global (`IsAuthenticated`). **Avisar al
+  usuario** de que el backend debería restringir la escritura a superadmin.
+
+---
+
+## 1. Estado actual (análisis del repositorio, verificado en el código)
+
+### Parte II-B — Categorías disponibles (COMPLETADA)
+- `src/types/index.ts`: `CompetitionCategory`, `CompetitionCategoryWritePayload`, `EnabledCompetitionCategory` (`competition_category` como **id numérico**), `EnabledCompetitionCategoryWritePayload`.
+- `src/api/admin.ts`: CRUD del catálogo con `assertSuperUser()` + CRUD de habilitaciones (PATCH envía solo `finalist_slots`).
+- `src/hooks/useAdminModules.ts`: hooks de catálogo y de habilitaciones por scope con invalidación.
+- `src/pages/admin/CategoriesPage.tsx`, `CategoryFormPage.tsx`, `CompetitionCategoriesPage.tsx` (nuevos).
+- `src/App.tsx` (rutas) y `src/components/admin/AdminSidebar.tsx` (ítems según rol).
+- Tests: `fixtures.ts`, `adminApi.test.ts`, `CategoriesPage.test.tsx`, `CompetitionCategoriesPage.test.tsx`.
+
+### Parte II — Pantalla pública (COMPLETADA)
+- `src/pages/public/HomeIndex.tsx` (`/`: Recientes + Todas + búsqueda) y `CompetitionDetail.tsx` (`/competitions/:slug/`).
+- `src/components/public/`: `CompetitionCard`, `Tabs`, `StatusBadge`, `CombinedLeaderboardTable` (celdas con puesto + puntos + time/reps, ordinales en inglés, top-3), `MedalIcon` (SVG propio oro/plata/bronce), `LeaderboardFilters`, `WodList`, `LocationMap` (Google Maps legacy sin key, coords string/null coaccionadas con `Number()`), `EmptyState`.
+- `src/api/public.ts` con `{ auth: false }` (vistas públicas sin JWT → se ven todas las competiciones publicadas).
+- `utils/leaderboard.ts` (`buildCombinedLeaderboards`), `utils/format.ts`, `utils/cn.ts`.
+- Refactor backend reflejado: eventos por `competition`+`phase`, `finalist_slots` en `EnabledCompetitionCategory`, `event_results[]` como objetos.
+
+> Conclusión: la Parte II-C es el único trabajo de `PROMPT.md` pendiente de ejecución.
+
+### Parte II-C — Filiaciones (PENDIENTE) — lo que ya existe
+- `src/types/index.ts`: existe `Affiliation` (`id`, `name`, `city`, `state`, `country`). **NO existe** `AffiliationWritePayload`.
+- `src/api/admin.ts`: `getAdminCatalogs()` ya hace `GET /affiliations/` (lectura para el select de `CompetitionFormPage`). **NO existen** `fetchAffiliation(id)`, `createAffiliation`, `updateAffiliation`, `deleteAffiliation`.
+- No hay `src/pages/admin/AffiliationsPage.tsx` ni `AffiliationFormPage.tsx`.
+- No hay ruta `/admin/affiliations` en `src/App.tsx` ni ítem en `AdminSidebar.tsx`.
+- `assertSuperUser()` ya existe en `src/api/admin.ts:42` y se reutilizará.
+
+---
+
+## 2. Parte II-C — Objetivo y reglas de negocio
 
 | Regla de negocio | Quién | Dónde |
-|------------------|-------|-------|
-| **CRUD del catálogo** de categorías (`CompetitionCategory`: `name`, `min_members`, `max_members`) | **Solo superadmin** (`user.is_superuser`) | `/admin/categories` |
-| **Habilitar** categorías del catálogo en una competición | **Admin de competición** sobre sus competiciones asignadas | `/admin/competition-categories` |
-| **Asignar `finalist_slots`** (slots que pasan a la Final; `0` = sin Final) | Admin de competición (y superadmin) | `/admin/competition-categories` |
+|-------------------|-------|-------|
+| **CRUD del catálogo de filiaciones** (`Affiliation`: `name` obligatorio, `city`, `state`, `country`) | **Solo superadmin** | `/admin/affiliations` |
+| Leer filiaciones para selects (competencias, atletas) | Superadmin + admin | `getAdminCatalogs` (ya existe, no cambia) |
+| Borrado en uso | Depende del backend (`ProtectedError` vs `CASCADE`) | Manejar error 4xx en UI con mensaje claro |
 
-Regla clave: el admin de competición **NO puede crear/editar/eliminar** categorías del catálogo; solo las **habilita** y define slots. La restricción de rol se implementa **en frontend** (ocultar + bloquear escritura del catálogo si no es superadmin). El backend hoy **no** restringe estos endpoints por rol (permiso global `IsAuthenticated`): **avisar al usuario** de que convendría reforzarlo en backend, sin tocarlo en esta iteración.
-
----
-
-## 1. Análisis del estado actual
-
-### Backend (verificado, `leader\Scorely`)
-- `CompetitionCategoryViewSet` (`apps/events/views.py:21`) — `ModelViewSet`, `search_fields=('name',)`. Serializer: `(id, name, min_members, max_members)`. Ruta: `/api/v1/competition-categories/`.
-- `EnabledCompetitionCategoryViewSet` (`apps/events/views.py:27`) — `ModelViewSet`, `filterset_fields=('competition',)`. Serializer: `(id, competition, competition_category, finalist_slots)`. Ruta: `/api/v1/enabled-competition-categories/`.
-- Permisos por defecto: `IsAuthenticated` (cualquier usuario autenticado tiene acceso). No hay `IsSuperAdmin`/`IsCompetitionAdmin` sobre estos endpoints (los datos se obtienen con JWT).
-
-### Frontend (examinado)
-- **Router** (`src/App.tsx`): rutas admin bajo `<RoleGuard><AdminLayout/></RoleGuard>`. No hay `requiredRoles` en uso real; la distinción supervisor se lee de `user.is_superuser` (ver `CompetitionsPage`, `AdminSidebar`).
-- **Sidebar** (`src/components/admin/AdminSidebar.tsx`): `menuItems` (Dashboard, Competiciones) y `manageItems` (Eventos, Atletas, Equipos). Pies distintos para superadmin vs admin (ya usa `is_superuser`).
-- **API admin** (`src/api/admin.ts`): ya existe `fetchEnabledCompetitionCategories(competitionId)` (GET) y `fetchCatalog<T>` genérico. **Faltan** las funciones de escritura y el GET del catálogo.
-- **Tipos** (`src/types/index.ts`): ya existe `EnabledCompetitionCategory` (con `competition_category` tipado como **objeto** `{id, code, name}`). **No existe** `CompetitionCategory`.
-  - ⚠️ **Desalineación a verificar**: el serializer del backend devuelve `competition_category` como **id** (FK), no como objeto. Hay que comprobar el payload real y ajustar el tipo (`competition_category: number`) o cruzar con el catálogo para mostrar el nombre.
-- **Hooks**: `useAdminModules.ts` (eventos/atletas/equipos) y `useEnabledCompetitionCategories.ts` (usa `api/public.ts`, no el admin). Conviene agregar hooks admin dedicados.
-- **Scope**: `useAdminScopeStore` (`competitionId` persistido) + `CompetitionScopeSelect` (auto-selecciona la primera competición asignada).
+Regla clave: el admin de competición **NO** accede a `/admin/affiliations`. La
+defensa es **solo en frontend** (ocultar menú ruta + `assertSuperUser()` en las
+escrituras de la API). El backend no restringe por rol: **avisar al usuario**.
 
 ---
 
-## 2. Archivos a modificar / crear (resumen)
+## 3. Matriz de archivos (Parte II-C)
 
 | Archivo | Tipo | Cambio |
 |---------|------|--------|
-| `src/types/index.ts` | Modificar | Añadir `CompetitionCategory`; ajustar `EnabledCompetitionCategory.competition_category` al shape real |
-| `src/api/admin.ts` | Modificar | `fetchCompetitionCategories`, `createCompetitionCategory`, `updateCompetitionCategory`, `deleteCompetitionCategory`, `createEnabledCompetitionCategory`, `updateEnabledCompetitionCategory`, `deleteEnabledCompetitionCategory` |
-| `src/hooks/useAdminModules.ts` | Modificar | Hooks admin de categorías y habilitaciones (query + mutations con invalidación) |
-| `src/pages/admin/CategoriesPage.tsx` | **Crear** | CRUD del catálogo (solo superadmin) |
-| `src/pages/admin/CategoryFormPage.tsx` | **Crear** | Form create/edit de categoría (replicar patrón `EventFormPage`) |
-| `src/pages/admin/CompetitionCategoriesPage.tsx` | **Crear** | Habilitaciones por competición + select de categoría + `finalist_slots` |
-| `src/App.tsx` | Modificar | Registrar rutas nuevas |
-| `src/components/admin/AdminSidebar.tsx` | Modificar | Ítem "Categorías" (solo superadmin) y "Categorías por competición" (admin) |
-| `tests/fixtures.ts` | Modificar | Fixtures `makeCompetitionCategory`, `makeEnabledCompetitionCategory` |
-| `tests/adminApi.test.ts` | Modificar | Tests de las nuevas funciones API |
-| `tests/CategoriesPage.test.tsx` | **Crear** | Tests de UI |
-| `tests/CompetitionCategoriesPage.test.tsx` | **Crear** | Tests de UI |
+| `src/types/index.ts` | Modificar | Añadir `AffiliationWritePayload`; revisar shape real de `Affiliation` (¿campos extra? ¿`name` único?) |
+| `src/api/admin.ts` | Modificar | `fetchAffiliation(id)`, `fetchAffiliations()` (o reutilizar catálogo), `createAffiliation`, `updateAffiliation`, `deleteAffiliation` (todas con `assertSuperUser()` excepto las de lectura) |
+| `src/hooks/useAdminModules.ts` | Modificar | `useAdminAffiliations`, `useCreateAffiliation`, `useUpdateAffiliation`, `useDeleteAffiliation` (invalidar `["admin","affiliations"]`) |
+| `src/pages/admin/AffiliationsPage.tsx` | **Crear** | Tabla + acciones, solo superadmin (replicar `CategoriesPage`) |
+| `src/pages/admin/AffiliationFormPage.tsx` | **Crear** | Form create/edit react-hook-form + zod (replicar `CategoryFormPage`) |
+| `src/App.tsx` | Modificar | Rutas `/admin/affiliations`, `/admin/affiliations/new`, `/admin/affiliations/:id/edit` |
+| `src/components/admin/AdminSidebar.tsx` | Modificar | Ítem "Filiaciones" (solo superadmin) |
+| `src/components/admin/icons.tsx` | Modificar | (Opcional) ícono nuevo útil para Filiaciones si se desea uno distinto de `GroupIcon` |
+| `tests/fixtures.ts` | Modificar | `makeAffiliation(overrides)` |
+| `tests/adminApi.test.ts` | Modificar | Tests de CRUD de filiaciones + bloqueo no-superadmin |
+| `tests/AffiliationsPage.test.tsx` | **Crear** | Tests de UI (superadmin/admin, estados) |
+| `tests/AffiliationFormPage.test.tsx` | **Crear** (opcional) | Tests del formulario |
 | `Process.md` | Modificar | Registrar avances |
-| `RESULTADOS.md` | Modificar | Registrar resultado al terminar |
+| `RESULTADOS.md` | Modificar | Registrar resultado y avisos al terminar |
 
 ---
 
-## 3. Plan paso a paso
+## 4. Pasos detallados (Parte II-C)
 
-### Paso 1 — Tipos DTOs
+### Paso 1 — Verificar el shape real del backend (informativo, NO ejecutar backend)
+
+**Qué hacer**:
+1. Confirmar el serializer de `Affiliation` en `leader\Scorely` (`apps/competitions` o donde viva el modelo): campos exactos, obligatoriedad de `name`, ¿`city`/`state`/`country` opcionales?, ¿`name` único?
+2. Confirmar que `/api/v1/affiliations/{id}/` existe (GET individual) por el `ModelViewSet` estándar.
+3. Confirmar el comportamiento del **DELETE en uso** (¿`ProtectedError` → se rechaza el DELETE, o `CASCADE`?): condiciona el manejo de errores en la UI (Paso 8).
+4. **AVISAR al usuario** (sin tocar backend) si la escritura no está restringida a superadmin: conviene `IsSuperAdmin` en `AffiliationViewSet`.
+
+**Verificación**: anotar en `Process.md` el shape verificado (endpoint real `/api/v1/affiliations/`). No ejecutar comandos del backend.
+
+---
+
+### Paso 2 — Tipos DTOs
 
 **Archivo**: `src/types/index.ts`
 
-**Qué hacer**:
-1. Añadir el tipo del catálogo (coincide con `CompetitionCategorySerializer`):
-   ```typescript
-   export interface CompetitionCategory {
-     id: number;
-     name: string;
-     min_members: number;
-     max_members: number;
-   }
+**Qué hacer** (replicar patrón `CompetitionCategory`/`CompetitionCategoryWritePayload`):
 
-   export interface CompetitionCategoryWritePayload {
-     id?: number;
-     name: string;
-     min_members: number;
-     max_members: number;
-   }
-   ```
-2. Revisar el shape real del payload de `GET /enabled-competition-categories/`:
-   - Si `competition_category` llega como **id numérico** (esperado por FK), ajustar:
-     ```typescript
-     export interface EnabledCompetitionCategory {
-       id: number;
-       competition: number;
-       competition_category: number; // id de CompetitionCategory
-       finalist_slots: number;
-     }
-     ```
-   - Si llega como objeto anidado, mantener objeto y cruzar nombre directo.
-3. Añadir `EnabledCompetitionCategoryWritePayload` para las escrituras:
-   ```typescript
-   export interface EnabledCompetitionCategoryWritePayload {
-     id?: number;
-     competition: number;
-     competition_category: number;
-     finalist_slots: number;
-   }
-   ```
+```ts
+export interface AffiliationWritePayload {
+  id?: number;
+  name: string;
+  city?: string;
+  state?: string;
+  country?: string;
+}
+```
 
-**Verificación**: `npm run typecheck` refleja el nuevo tipo sin romper usos existentes. El consumo actual de `EnabledCompetitionCategory` es mínimo (solo `fetchEnabledCompetitionCategories` sin consumidores de UI), por lo que el ajuste no debería romper nada.
+- Ajustar la obligatoriedad (`city`/`state`/`country`) según lo verificado en el Paso 1.
+- Si el serializer expone más campos, actualizar también `Affiliation`.
+
+**Verificación**: `npm run typecheck` no rompe usos existentes (`Affiliation` se usa en `getAdminCatalogs`, `CompetitionSummary`, `Athlete`, `Team`).
 
 ---
 
-### Paso 2 — Funciones API admin
+### Paso 3 — Funciones API admin
 
 **Archivo**: `src/api/admin.ts`
 
-**Qué hacer**: añadir, siguiendo el patrón existente (`fetchCatalog`, `request`):
+**Qué hacer** (mismo patrón que el catálogo de categorías):
 
-- **Catálogo (SÓLO superadmin en UI)**:
-  ```typescript
-  export async function fetchCompetitionCategories(): Promise<CompetitionCategory[]> {
-    return fetchCatalog<CompetitionCategory>("/competition-categories/?page_size=100");
-  }
-  export async function createCompetitionCategory(payload: CompetitionCategoryWritePayload): Promise<CompetitionCategory> {
-    return request<CompetitionCategory>("/competition-categories/", {
-      method: "POST", body: JSON.stringify(payload),
-    });
-  }
-  export async function updateCompetitionCategory(payload: CompetitionCategoryWritePayload): Promise<CompetitionCategory> {
-    return request<CompetitionCategory>(`/competition-categories/${payload.id}/`, {
-      method: "PATCH", body: JSON.stringify(payload),
-    });
-  }
-  export async function deleteCompetitionCategory(id: number): Promise<void> {
-    await request<void>(`/competition-categories/${id}/`, { method: "DELETE" });
-  }
-  ```
-- **Habilitaciones (admin de competición con scope)**:
-  ```typescript
-  export async function createEnabledCompetitionCategory(payload: EnabledCompetitionCategoryWritePayload): Promise<EnabledCompetitionCategory> {
-    return request<EnabledCompetitionCategory>("/enabled-competition-categories/", {
-      method: "POST", body: JSON.stringify(payload),
-    });
-  }
-  export async function updateEnabledCompetitionCategory(payload: EnabledCompetitionCategoryWritePayload): Promise<EnabledCompetitionCategory> {
-    return request<EnabledCompetitionCategory>(`/enabled-competition-categories/${payload.id}/`, {
-      method: "PATCH", body: JSON.stringify(payload),
-    });
-  }
-  export async function deleteEnabledCompetitionCategory(id: number): Promise<void> {
-    await request<void>(`/enabled-competition-categories/${id}/`, { method: "DELETE" });
-  }
-  ```
-- `fetchEnabledCompetitionCategories` ya existe: verificar que se lee con el nuevo tipo.
+```ts
+export async function fetchAffiliations(): Promise<Affiliation[]> {
+  return fetchCatalog<Affiliation>("/affiliations/?page_size=100");
+}
 
-**Verificación**: `npm run typecheck` y tests de API nuevos (Paso 7).
+export async function fetchAffiliation(id: number): Promise<Affiliation> {
+  return request<Affiliation>(`/affiliations/${id}/`);
+}
 
----
+export async function createAffiliation(
+  payload: AffiliationWritePayload,
+): Promise<Affiliation> {
+  assertSuperUser();
+  return request<Affiliation>("/affiliations/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
 
-### Paso 3 — Hooks admin
+export async function updateAffiliation(
+  payload: AffiliationWritePayload,
+): Promise<Affiliation> {
+  assertSuperUser();
+  return request<Affiliation>(`/affiliations/${payload.id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
 
-**Archivo**: `src/hooks/useAdminModules.ts` (o `src/hooks/useAdminCategories.ts` nuevo)
+export async function deleteAffiliation(id: number): Promise<void> {
+  assertSuperUser();
+  await request<void>(`/affiliations/${id}/`, { method: "DELETE" });
+}
+```
 
-**Qué hacer**: agregar hooks con el mismo patrón de `useAdminEvents`/`useDeleteEvent`:
+- `fetchAffiliations()` representa **también** el catálogo ya usado por `getAdminCatalogs` (se puede reutilizar para eliminarla de `getAdminCatalogs` o mantener ambas; recomendar **reutilizar** `fetchAffiliations()` dentro de `getAdminCatalogs` si se quiere un solo origen).
+- `assertSuperUser()` ya existe; las tres funciones de escritura lo usan (defensa en UI ante no-superadmin).
 
-- `useAdminCompetitionCategories()` → `useQuery(["admin","competition-categories"], fetchCompetitionCategories)`.
-- `useCreateCompetitionCategory()` / `useUpdateCompetitionCategory()` / `useDeleteCompetitionCategory()` → mutations que invalidan `["admin","competition-categories"]`.
-- `useAdminEnabledCategories(competitionId)` → `useQuery` con `enabled: Boolean(competitionId)`, queryKey `["admin","enabled-competition-categories", competitionId]`.
-- `useCreateEnabledCategory(competitionId)` / `useUpdateEnabledCategory(competitionId)` / `useDeleteEnabledCategory(competitionId)` → mutations que invalidan `["admin","enabled-competition-categories", competitionId]`.
-
-**Verificación**: compilar (`npm run typecheck`).
+**Verificación**: `npm run typecheck`. Tests de API en el Paso 9.
 
 ---
 
-### Paso 4 — Página `CategoriesPage` (catálogo, solo superadmin)
+### Paso 4 — Hooks admin
 
-**Archivo**: `src/pages/admin/CategoriesPage.tsx` (**crear**)
+**Archivo**: `src/hooks/useAdminModules.ts`
 
-**Qué hacer**: replicar patrón de `CompetitionsPage`:
+**Qué hacer** (replicar hooks del catálogo de categorías, invalidando `["admin","affiliations"]`):
+
+- `useAdminAffiliations()` → `useQuery({ queryKey: ["admin","affiliations"], queryFn: fetchAffiliations, staleTime: 30_000 })`.
+- `useCreateAffiliation()` / `useUpdateAffiliation()` / `useDeleteAffiliation()` → mutations que en `onSuccess` invalidan `["admin","affiliations"]`.
+
+**Verificación**: `npm run typecheck`.
+
+---
+
+### Paso 5 — Página `AffiliationsPage` (catálogo, solo superadmin)
+
+**Archivo**: `src/pages/admin/AffiliationsPage.tsx` (**crear**)
+
+**Qué hacer** (replicar `CategoriesPage.tsx` 1:1 adaptando campos):
 - `const isSuperUser = Boolean(useAuthStore((s) => s.user?.is_superuser));`
-- Si **no** es superadmin: renderizar estado de "sin acceso" (p. ej. `EmptyState` "Solo el superusuario puede administrar categorías") **y** no mostrar botones de escritura. (El backend no bloquea: la defensa es UI.)
-- Tabla: columnas `Nombre`, `Mín. integrantes`, `Máx. integrantes`, `Acciones` (Editar / Eliminar).
-- `PageBreadcrumb pageTitle="Categorías"`.
-- Botón "Nueva categoría" → `/admin/categories/new`.
-- `handleDelete` con `window.confirm` + mutation `useDeleteCompetitionCategory` (patrón `CompetitionsPage`).
+- Si `!isSuperUser`: breadcrumb + aviso "Solo el superusuario puede administrar las filiaciones." (sin acciones).
+- Estados: `Spinner` (carga), `ErrorState` (error), `EmptyState` "Sin filiaciones" (vacío).
+- Tabla: columnas `Nombre`, `Ciudad`, `Estado/Provincia`, `País`, `Acciones` (Editar / Eliminar).
+- Botón "Nueva filiación" → `/admin/affiliations/new`.
+- `handleDelete(id, name)`: `window.confirm` + `useDeleteAffiliation`; **capturar `ApiError`** para mostrar mensaje claro si el backend rechaza por estar en uso (Paso 8).
 
-**Verificación**: navegar con superadmin y con admin; a admin no se le muestra ni la entrada de menú ni acciones.
-
----
-
-### Paso 5 — Form `CategoryFormPage` (crear/editar categoria)
-
-**Archivo**: `src/pages/admin/CategoryFormPage.tsx` (**crear**)
-
-**Qué hacer**: replicar patrón de `EventFormPage` (react-hook-form + zod + `useQuery` para edición):
-- Schema zod: `name` (requerido), `min_members` (número ≥ 0 via `z.coerce.number().min(0)`), `max_members` (número ≥ 0).
-- Validación de negocio en UI: `max_members >= min_members` → mensaje de error (aviso; preferir validar también en backend, ver Observaciones).
-- Create/edit con `useCreateCompetitionCategory` / `useUpdateCompetitionCategory`; al éxito navegar a `/admin/categories`.
-- Control de acceso: si no es superadmin, redirigir/mostrar sin acceso.
-
-**Verificación**: crear y editar una categoría (superadmin) persiste en el catálogo.
+**Verificación**: navegación manual con superadmin (ve todo) y con admin de competición (ve solo el aviso).
 
 ---
 
-### Paso 6 — Página `CompetitionCategoriesPage` (habilitación + slots)
+### Paso 6 — Form `AffiliationFormPage` (crear/editar)
 
-**Archivo**: `src/pages/admin/CompetitionCategoriesPage.tsx` (**crear**)
+**Archivo**: `src/pages/admin/AffiliationFormPage.tsx` (**crear**)
 
-**Qué hacer**: replicar patrón de `EventsPage` (usa `CompetitionScopeSelect` + `useAdminScopeStore`):
-- `CompetitionScopeSelect` arriba (auto-selecciona competición asignada).
-- **Lista de habilitaciones** de la competición seleccionada (hook `useAdminEnabledCategories(competitionId)`): tabla con `Categoría` (nombre cruzado desde el catálogo), `Slots final` (`finalist_slots`), `Acciones` (Editar / Quitar).
-- **Formulario/panel para habilitar**:
-  - Select de categoría: cargado desde `useAdminCompetitionCategories()` (GET catálogo, lectura).
-  - Input `finalist_slots` (número, ≥ 0).
-  - Botón "Habilitar" → `useCreateEnabledCategory(competitionId)` con `{ competition: competitionId, competition_category, finalist_slots }`.
-- **Editar slots**: edición inline (modal o fila editable) vía `useUpdateEnabledCategory` (`PATCH { competition_category, finalist_slots }` o solo `finalist_slots` según backend).
-- **Quitar**: `window.confirm` + `useDeleteEnabledCategory`.
-- No mostrar acciones de catálogo aquí (admin de competición no crea categorías).
+**Qué hacer** (replicar `CategoryFormPage.tsx`):
+- Schema zod: `name` (`z.string().min(1)`); `city`, `state`, `country` **strings opcionales** (`z.string().optional()` previamente a `""` según backend).
+- Create/edit con `useCreateAffiliation` / `useUpdateAffiliation`; edición usa `fetchAffiliation(Number(id))` en `useQuery` con `enabled: isEditing` y `reset` en `useEffect`.
+- Control de acceso: si `!isSuperUser`, mostrar aviso de sin acceso (patrón `CategoryFormPage`).
+- Capturar `ApiError` en `submit` y mostrarlo en un `role="alert"`.
 
-**Flujo de habilitación**: scope → ver categorías habilitadas → añadir del catálogo + slots → invalidación de la query del scope.
-
-**Verificación**: con admin asignado, habilitar una categoría y asignar slots; aparece en el leaderboard público (Paso 9).
+**Verificación**: crear y editar una filiación como superadmin persiste (backend real).
 
 ---
 
@@ -225,121 +231,119 @@ Regla clave: el admin de competición **NO puede crear/editar/eliminar** categor
 
 **Archivo**: `src/App.tsx`
 
-**Qué hacer**: registrar rutas:
+**Qué hacer** (junto a las rutas de categorías):
+
 ```tsx
-<Route path="/admin/categories" element={<CategoriesPage />} />
-<Route path="/admin/categories/new" element={<CategoryFormPage />} />
-<Route path="/admin/categories/:id/edit" element={<CategoryFormPage />} />
-<Route path="/admin/competition-categories" element={<CompetitionCategoriesPage />} />
+<Route path="/admin/affiliations" element={<AffiliationsPage />} />
+<Route path="/admin/affiliations/new" element={<AffiliationFormPage />} />
+<Route path="/admin/affiliations/:id/edit" element={<AffiliationFormPage />} />
 ```
 
 **Archivo**: `src/components/admin/AdminSidebar.tsx`
 
 **Qué hacer**:
-- `menuItems`: añadir ítem **Categorías** (`path: "/admin/categories"`) mostrado **solo si `isSuperUser`** (condicional en el array).
-- `manageItems`: añadir ítem **Categorías por competición** (`path: "/admin/competition-categories"`), visible para todos los admin.
-- Elegir íconos existentes de `icons.tsx` (p. ej. reutilizar `ListIcon`/`GroupIcon`; si se quiere uno específico, añadirlo con el patrón de `icons.tsx`).
+- Añadir ítem **"Filiaciones"** (`path: "/admin/affiliations"`) al bloque `menuItems` **condicionado a `isSuperUser`** (mismo spread condicional que "Categorías"). Ícono: reutilizar `GroupIcon` o añadir uno a `icons.tsx` siguiendo el patrón `StrokeIcon`.
 
-**Verificación**: el superadmin ve ambos ítems; el admin de competición solo ve "Categorías por competición". Acceso directo a `/admin/categories` como no-superadmin → pantalla de sin acceso (Paso 4).
+**Verificación**: superadmin ve "Filiaciones"; admin de competición no. Acceso directo a `/admin/affiliations` como no-superadmin → aviso de sin acceso (Paso 5).
 
 ---
 
-### Paso 8 — Bloqueo por rol en frontend (defensa)
+### Paso 8 — Bloqueo por rol + manejo de borrado en uso
 
-**Qué hacer** (reforzar la regla de negocio):
-- Guard en las páginas del catálogo (`CategoriesPage`, `CategoryFormPage`): si `!is_superuser`, no renderizar acciones/forms de escritura (y opcionalmente redirigir a `/admin`).
-- En `src/api/admin.ts`: para las funciones de escritura del catálogo (`create/update/deleteCompetitionCategory`), comprobar `useAuthStore.getState().user?.is_superuser` y lanzar error/bloquear si no aplica (defensa ante llamadas accidentales; **no** convierto esto en regla de autorización real — el backend debe decidir).
-- **Registrar como AVISO en `RESULTADOS.md`/`Process.md`**: el backend no restringe `CompetitionCategoryViewSet`/`EnabledCompetitionCategoryViewSet` por rol; para una regla de negocio real conviene `IsSuperAdmin` en escritura del catálogo y `IsCompetitionAdmin` en habilitaciones (decisión backend, no implementar aquí).
+**Qué hacer**:
+- **Guard por rol**: ya cubierto por `assertSuperUser()` (Paso 3) + ocultamiento en UI (Pasos 5–7). Verificar que no-superadmin **no** emite POST/PATCH/DELETE desde el frontend.
+- **Borrado en uso** (si el backend usa `ProtectedError` → HTTP 4xx): en `AffiliationsPage.handleDelete` capturar `ApiError` y mostrar un mensaje; por ejemplo: *"Esta filiación está en uso por competiciones o atletas y no se puede eliminar."* (no romper la lista).
+- **Registrar AVISO** en `Process.md`/`RESULTADOS.md`: backend no limita por rol la escritura de `AffiliationViewSet`; para una regla de negocio real conviene `IsSuperAdmin` (decisión backend, no implementar).
 
-**Verificación**: como admin de competición, crear categoría desde la UI no es posible y ninguna petición POST/PATCH/DELETE al catálogo se emite desde el frontend.
+**Verificación**: como admin de competición no es posible crear/editar/eliminar desde la UI ni se emiten peticiones de escritura.
 
 ---
 
 ### Paso 9 — Pruebas
 
-**Archivos**: `tests/fixtures.ts`, `tests/adminApi.test.ts`, `tests/CategoriesPage.test.tsx`, `tests/CompetitionCategoriesPage.test.tsx`
+**Archivos**: `tests/fixtures.ts`, `tests/adminApi.test.ts`, `tests/AffiliationsPage.test.tsx`, (opcional) `tests/AffiliationFormPage.test.tsx`
 
 **Qué hacer**:
-- Fixtures: `makeCompetitionCategory(overrides)`, `makeEnabledCompetitionCategory(overrides)`.
-- `adminApi.test.ts`: mockear `request` y verificar URLs/métodos de todas las funciones nuevas (patrón del test existente de `fetchAdminCompetitions`).
-- `CategoriesPage.test.tsx`:
-  - Superadmin: renderiza tabla, botón "Nueva categoría", editar/eliminar.
-  - No-superadmin: muestra sin acceso y no muestra acciones.
-  - Estados carga/error/vacío (replicar patrón `CompetitionsPage`).
-- `CompetitionCategoriesPage.test.tsx`:
-  - Con competición seleccionada: lista habilitaciones con nombre de categoría y slots.
-  - Habilitar categoría del catálogo + `finalist_slots`.
-  - Quitar habilitación (confirm) y editar slots.
-  - Sin competición seleccionada: mensaje para seleccionar scope.
+- Fixtures: `makeAffiliation(overrides)` siguiendo `makeCompetitionCategory`.
+- `adminApi.test.ts` (replicar patrón del bloque "competition category catalog"):
+  - Bloquea escrituras cuando `is_superuser: false` (`rejects.toThrow("No tenés permisos")`, `request` no llamado).
+  - POST/PATCH/DELETE correctos con `is_superuser: true` (URLs y métodos).
+  - `fetchAffiliations`/`fetchAffiliation` con URLs correctas.
+- `AffiliationsPage.test.tsx`:
+  - Superadmin: tabla + botón "Nueva filiación" + editar/eliminar.
+  - No-superadmin: aviso de sin acceso, sin acciones.
+  - Estados carga/error/vacío (patrón `CategoriesPage.test.tsx`).
+  - (Opcional) borrado rechazado por backend → mensaje de error visible.
+- `AffiliationFormPage.test.tsx` (opcional): validación de `name` requerido, submit create/edit.
 
 **Verificación**: `npm run test` en verde.
 
 ---
 
-### Paso 10 — Verificación final y cierre
+### Paso 10 — Verificación final y cierre de la Parte II-C
 
 Ejecutar en orden:
+
 1. `npm run lint` → sin errores
 2. `npm run typecheck` → sin errores
-3. `npm run test` → todos los tests en verde
+3. `npm run test` → todos en verde
 4. `npm run build` → OK (dist generado)
+5. Actualizar `Process.md` y `RESULTADOS.md` (avance del Paso 1 al 10 + avisos al usuario de backend).
 
 **Escenarios manuales** (con backend real disponible):
 
 | Escenario | Esperado |
 |-----------|----------|
-| Superadmin → `/admin/categories` | CRUD completo del catálogo |
-| Admin de competición → `/admin/categories` | Sin acceso / sin acciones de escritura |
-| Admin de competición → `/admin/competition-categories` | Auto-selecciona su competición; habilita del catálogo + `finalist_slots` |
-| Cambiar competición en scope | Actualiza habilitaciones de la competición elegida |
-| Tras habilitar categoría | La categoría aparece en leaderboard/competition detail público (si hay datos) |
-| `/admin/*` sin sesión | Redirige a `/login` |
+| Superadmin → `/admin/affiliations` | CRUD completo (crear/editar/eliminar) |
+| Superadmin crea `name`/`city`/`state`/`country` | Aparece en el listado y en el select de competiciones |
+| Admin de competición → `/admin/affiliations` | Sin acceso (oculto en menú, aviso en pantalla) |
+| No-superadmin intenta POST/PATCH/DELETE | El frontend no emite la petición (guard por rol) |
+| Eliminar filiación con competiciones/atletas asociados | Mensaje de error claro si el backend rechaza (4xx) |
 
 ---
 
-## 4. Análisis de endpoints (detalle)
+## 5. Endpoints de la Parte II-C (resumen)
 
-### Catálogo — `/api/v1/competition-categories/`
+| Acción | Método | URL | Auth | Rol frontend |
+|--------|--------|-----|------|-------------|
+| Listar filiaciones | GET | `/api/v1/affiliations/?page_size=100` | JWT | superadmin + admin (select) |
+| Obtener filiación | GET | `/api/v1/affiliations/{id}/` | JWT | superadmin (edición) |
+| Crear filiación | POST | `/api/v1/affiliations/` | JWT | **solo superadmin** (`assertSuperUser`) |
+| Editar filiación | PATCH | `/api/v1/affiliations/{id}/` | JWT | **solo superadmin** |
+| Eliminar filiación | DELETE | `/api/v1/affiliations/{id}/` | JWT | **solo superadmin** |
 
-| Acción | Método | URL | Payload |
-|--------|--------|-----|---------|
-| Listar | GET | `/api/v1/competition-categories/?page_size=100` | — |
-| Crear | POST | `/api/v1/competition-categories/` | `{ name, min_members, max_members }` |
-| Editar | PATCH | `/api/v1/competition-categories/{id}/` | `{ name?, min_members?, max_members? }` |
-| Eliminar | DELETE | `/api/v1/competition-categories/{id}/` | — |
-
-### Habilitaciones — `/api/v1/enabled-competition-categories/`
-
-| Acción | Método | URL | Payload |
-|--------|--------|-----|---------|
-| Listar por competición | GET | `/api/v1/enabled-competition-categories/?competition={id}` | — |
-| Habilitar | POST | `/api/v1/enabled-competition-categories/` | `{ competition, competition_category, finalist_slots }` |
-| Editar slots | PATCH | `/api/v1/enabled-competition-categories/{id}/` | `{ finalist_slots }` (PATCH parcial; pasar solo el campo a editar) |
-| Quitar | DELETE | `/api/v1/enabled-competition-categories/{id}/` | — |
-
-> Constraint único `(competition, competition_category)`: al habilitar una categoría ya habilitada el backend devolverá 400 → mostrar mensaje amigable (capturar `ApiError`).
+> El GET de catálogo ya lo consume `getAdminCatalogs` (select de `CompetitionFormPage`, `Athlete`, `Team`). No se puede borrar una filiación usada por competiciones/atletas si el backend lo protege (`ProtectedError` → 4xx) → manejar en la UI (Paso 8).
 
 ---
 
-## 5. Orden de ejecución recomendado
+## 6. Orden de ejecución recomendado (Parte II-C)
 
-1. **Paso 1** (tipos) → base para todo lo demás.
-2. **Paso 2 + 3** (API + hooks) — independientes entre sí, dependen de Paso 1.
-3. **Paso 4 + 5** (catálogo: listado + form).
-4. **Paso 6** (habilitaciones por competición).
-5. **Paso 7** (rutas + sidebar) y **Paso 8** (bloqueo por rol).
-6. **Paso 9** (tests) — cubre páginas y API.
+1. **Paso 1** (verificar backend, informativo) — desbloquea decisiones de shape y borrado.
+2. **Paso 2** (tipos) → base para todo lo demás.
+3. **Paso 3 + 4** (API + hooks), dependen de Paso 2; independientes entre sí.
+4. **Paso 5 + 6** (listado + form del catálogo).
+5. **Paso 7** (rutas + sidebar) y **Paso 8** (guard + borrado en uso).
+6. **Paso 9** (tests) — cubre API y páginas.
 7. **Paso 10** (verificación final + documentación).
 
-Los pasos 4–6 requieren tipos/hooks/API listos (1–3). El paso 7 es integración; el 8 aplica sobre 4–5.
+---
+
+## 7. Restricciones que se mantienen (de `PROMPT.md` Parte III)
+
+- **NO** tocar el backend (ni permisos ni endpoints) en esta iteración; el refuerzo por rol queda **avisado** al usuario.
+- **NO** tocar `free-react-tailwind-admin-dashboard/` (solo lectura).
+- **NO** crear ramas, no push, no commit sin pedido explícito.
+- **NO** mockear datos en producción.
+- No añadir comentarios al código salvo que se soliciten.
+- Documentar avances en `Process.md` al iniciar y finalizar cada paso.
+- Mantener el estilo TailAdmin (tema claro), tablas/formularios iguales a `CategoriesPage`/`CategoryFormPage`.
+- No tomar tecnologías nuevas sin preguntar (regla de la Parte I).
 
 ---
 
-## 6. Restricciones que se mantienen
+## 8. Avisos al usuario (backend — no se toca en frontend)
 
-- **NO** tocar el backend (ni permisos ni endpoints) en esta iteración; el refuerzo por rol queda **avisado** al usuario.
-- **NO** tocar `free-react-tailwind-admin-dashboard/`.
-- **NO** crear ramas ni hacer push/commit.
-- **NO** mockear datos en producción.
-- Documentar avances en `Process.md` al iniciar y finalizar cada paso.
-- Mantener el estilo TailAdmin (tema claro, tablas/formularios iguales a `EventsPage`/`CompetitionsPage`).
+1. **Restricción de roles solo en frontend:** el backend expone `affiliations/` con permiso global `IsAuthenticated`; cualquier usuario autenticado podría escribir. Para una regla de negocio real conviene `IsSuperAdmin` en la escritura de `AffiliationViewSet`. **(Decisión backend, no implementar aquí.)**
+2. **Verificar shape del serializer `Affiliation`**: campos exactos y obligatoriedad (el tipo frontend actual solo contempla `name/city/state/country`).
+3. **Borrado en uso**: confirmar si el backend protege el DELETE (`ProtectedError`) o aplica `CASCADE`; el frontend manejará el error 4xx con un mensaje claro, pero el comportamiento definitivo depende del backend.
+4. Endpoints públicos pendientes (de la Parte II): el backend solo tiene `leaderboards` con `AllowAny`; `competitions`, `enabled-competition-categories` y `events` requieren JWT. **Decisión aplazada** en `PROMPT.md` §12 para otra iteración.

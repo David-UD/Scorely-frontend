@@ -327,6 +327,35 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 
 ---
 
+## Iteración 2026-09-21 — Módulo admin "Filiaciones" (Parte II-C)
+
+> Ejecución del plan `PLAN.md` (Pasos 1–10). CRUD del catálogo de filiaciones en `/admin/affiliations`, **solo superadmin**. Sin tocar el backend.
+
+### Cambios aplicados
+- `src/types/index.ts`: `Affiliation` ampliado (`description?: string`, `logo?: string | null`) y nuevo `AffiliationWritePayload` (`id?`, `name`, `city`, `state`, `country`, `description?`).
+- `src/api/admin.ts`: `fetchAffiliations()` (reutilizada por `getAdminCatalogs()`), `fetchAffiliation(id)`, `createAffiliation`, `updateAffiliation`, `deleteAffiliation` (escrituras con `assertSuperUser()`); mensaje generalizado: "No tenés permisos para realizar esta acción.".
+- `src/hooks/useAdminModules.ts`: `useAdminAffiliations`, `useCreate/Update/DeleteAffiliation` (invalidan `["admin","affiliations"]`).
+- `src/pages/admin/AffiliationsPage.tsx` (nuevo): tabla Nombre/Ciudad/Estado/País/Acciones, "Nueva filiación", confirm + banner de error al borrar (mensaje si está en uso por competiciones), gate superadmin, Spinner/ErrorState/EmptyState.
+- `src/pages/admin/AffiliationFormPage.tsx` (nuevo): create/edit con react-hook-form + zod (`name/city/state/country` requeridos), carga en edición, captura de `ApiError`.
+- `src/components/admin/icons.tsx`: nuevo `BuildingIcon`; `AdminSidebar.tsx`: ítem "Filiaciones" (solo superadmin); `src/App.tsx`: rutas `/admin/affiliations[/new/:id/edit]`.
+- `tests/fixtures.ts`: `makeAffiliation`; `tests/adminApi.test.ts` (bloque "affiliations catalog"); `tests/AffiliationsPage.test.tsx` (nuevo, 5 casos).
+- Test `z=16` → `z=19` en `tests/CompetitionDetail.test.tsx`: los assertions del mapa esperaban `z=16`, pero `LocationMap.tsx` ya commiteado usa `TARGET_ZOOM = 19` (fallo preexistente, no relacionado con este módulo).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run typecheck` | OK |
+| `npm run test` | **70/70** en verde (11 archivos) |
+| `npm run build` | OK |
+
+### Notas
+- **Backend sin restricción por rol**: `AffiliationViewSet` usa el permiso global `IsAuthenticated` — el "solo superadmin" se aplica **en el frontend** (`assertSuperUser()` + gate en páginas). Si se requiere seguridad real, hay que añadir un `permission_classes` con `IsSuperUser` en el backend.
+- **Borrado en uso**: `Competition.affiliation` usa `on_delete=PROTECT`; `DELETE` sobre una filiación referenciada falla (el frontend muestra el banner correspondiente).
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -342,6 +371,7 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 - [x] solo español, tema claro
 - [x] no se tocó `free-react-tailwind-admin-dashboard/`
 - [x] (2026-09-15) módulo admin de categorías disponibles: catálogo solo superadmin; habilitación + `finalist_slots` por competición para admin de competición
+- [x] (2026-09-21) módulo admin de filiaciones: CRUD del catálogo en `/admin/affiliations` solo superadmin (Parte II-C)
 
 ## No se tocó
 

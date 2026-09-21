@@ -183,7 +183,7 @@ describe("CompetitionDetail", () => {
     const mapFrame = screen.getByTitle("Mapa de Box El Pilar");
     expect(mapFrame).toBeInTheDocument();
     expect(mapFrame.getAttribute("src")).toContain("q=19.826473,-90.524499");
-    expect(mapFrame.getAttribute("src")).toContain("z=16");
+    expect(mapFrame.getAttribute("src")).toContain("z=19");
   });
 
   it("centers the map on the coordinates at a near zoom", () => {
@@ -191,7 +191,7 @@ describe("CompetitionDetail", () => {
     const mapFrame = screen.getByTitle("Mapa de Box El Pilar");
     const src = mapFrame.getAttribute("src") ?? "";
     expect(src).toContain("q=-34.6,-58.38");
-    expect(src).toContain("z=16");
+    expect(src).toContain("z=19");
     expect(src).toContain("output=embed");
   });
 

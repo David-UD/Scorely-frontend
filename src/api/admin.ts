@@ -2,6 +2,7 @@ import { request } from "./client";
 import { useAuthStore } from "@/store/authStore";
 import type {
   Affiliation,
+  AffiliationWritePayload,
   Athlete,
   AthleteWritePayload,
   Competition,
@@ -41,17 +42,17 @@ async function fetchCatalog<T>(path: string): Promise<T[]> {
 
 function assertSuperUser(): void {
   if (!useAuthStore.getState().user?.is_superuser) {
-    throw new Error("No tenés permisos para administrar el catálogo de categorías.");
+    throw new Error("No tenés permisos para realizar esta acción.");
   }
 }
 
 export async function getAdminCatalogs(): Promise<AdminCatalogs> {
-  const [competitionTypes, statuses, affiliations, locations] = await Promise.all([
+  const [competitionTypes, statuses, locations] = await Promise.all([
     fetchCatalog<CompetitionType>("/competition-types/"),
     fetchCatalog<CompetitionStatus>("/status-competitions/"),
-    fetchCatalog<Affiliation>("/affiliations/"),
     fetchCatalog<Location>("/locations/"),
   ]);
+  const affiliations = await fetchAffiliations();
   return { competitionTypes, statuses, affiliations, locations };
 }
 
@@ -79,6 +80,41 @@ export async function updateCompetition(
 
 export async function deleteCompetition(id: number): Promise<void> {
   await request<void>(`/competitions/${id}/`, { method: "DELETE" });
+}
+
+// ── Affiliations (superadmin catalog) ────────────────────────────────────────
+
+export async function fetchAffiliations(): Promise<Affiliation[]> {
+  return fetchCatalog<Affiliation>("/affiliations/?page_size=100");
+}
+
+export async function fetchAffiliation(id: number): Promise<Affiliation> {
+  return request<Affiliation>(`/affiliations/${id}/`);
+}
+
+export async function createAffiliation(
+  payload: AffiliationWritePayload,
+): Promise<Affiliation> {
+  assertSuperUser();
+  return request<Affiliation>("/affiliations/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAffiliation(
+  payload: AffiliationWritePayload,
+): Promise<Affiliation> {
+  assertSuperUser();
+  return request<Affiliation>(`/affiliations/${payload.id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAffiliation(id: number): Promise<void> {
+  assertSuperUser();
+  await request<void>(`/affiliations/${id}/`, { method: "DELETE" });
 }
 
 // ── Competition category catalog ────────────────────────────────────────────

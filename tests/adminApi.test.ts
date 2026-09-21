@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  createAffiliation,
   createCompetitionCategory,
+  deleteAffiliation,
   deleteCompetitionCategory,
+  updateAffiliation,
   updateCompetitionCategory,
   createEnabledCompetitionCategory,
   updateEnabledCompetitionCategory,
   deleteEnabledCompetitionCategory,
   fetchEnabledCompetitionCategories,
+  fetchAffiliations,
   fetchAdminCompetitions,
 } from "@/api/admin";
 import { request } from "@/api/client";
@@ -94,6 +98,89 @@ describe("competition category catalog", () => {
     await deleteCompetitionCategory(9);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/competition-categories/9/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("affiliations catalog", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("blocks catalog writes when user is not superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: false });
+    await expect(
+      createAffiliation({
+        name: "Box El Pilar",
+        city: "Buenos Aires",
+        state: "Buenos Aires",
+        country: "Argentina",
+      }),
+    ).rejects.toThrow("No tenés permisos");
+    expect(mockedRequest).not.toHaveBeenCalled();
+  });
+
+  it("fetches the affiliations catalog", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        { id: 1, name: "Box El Pilar", city: "Buenos Aires", state: "Buenos Aires", country: "Argentina" },
+      ],
+    });
+    const result = await fetchAffiliations();
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith("/affiliations/?page_size=100");
+  });
+
+  it("POSTs a new affiliation when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({
+      id: 9,
+      name: "Box El Pilar",
+      city: "Buenos Aires",
+      state: "Buenos Aires",
+      country: "Argentina",
+    });
+    await createAffiliation({
+      name: "Box El Pilar",
+      city: "Buenos Aires",
+      state: "Buenos Aires",
+      country: "Argentina",
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/affiliations/",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("PATCHes an affiliation when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({
+      id: 9,
+      name: "Box El Pilar",
+      city: "Buenos Aires",
+      state: "Buenos Aires",
+      country: "Argentina",
+    });
+    await updateAffiliation({
+      id: 9,
+      name: "Box El Pilar",
+      city: "Buenos Aires",
+      state: "Buenos Aires",
+      country: "Argentina",
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/affiliations/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("DELETEs an affiliation when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteAffiliation(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/affiliations/9/",
       expect.objectContaining({ method: "DELETE" }),
     );
   });

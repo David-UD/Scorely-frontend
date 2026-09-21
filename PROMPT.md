@@ -214,6 +214,75 @@ Administración de **categorías disponibles**: el superadmin mantiene el **cat�
 
 ---
 
+# Parte II-C — Módulo admin: Filiaciones (afiliaciones)
+
+## 1. Título
+
+Administración de **filiaciones** (`Affiliation`): el **superadmin** mantiene el catálogo de afiliaciones (boxes/gimnasios dueños de competiciones) que se usan como dueño/creador de cada competición y como dato de atletas. Página **solo superadmin**.
+
+## 2. Objetivo
+
+- **Superadmin**: CRUD completo del catálogo de filiaciones (`/admin/affiliations`) — crear, editar y eliminar (`name`, `city`, `state`, `country`).
+- **Admin de competición**: NO accede a esta página (defensa en UI).
+- La filiación se muestra como **dueño/creador** de la competición en las vistas públicas (`CompetitionDetail`, `CompetitionCard`) y es un select existente en `CompetitionFormPage`/`getAdminCatalogs`.
+
+## 3. Alcance
+
+**Incluye:**
+- Página `/admin/affiliations` (solo superadmin): lista y CRUD (crear/editar/eliminar) de `Affiliation`.
+- Menú lateral: ítem "Filiaciones" visible **solo para superadmin** (`user.is_superuser`).
+- Ruta protegida en el router admin con `<RoleGuard>` + condición por `is_superuser`.
+- Guard de escritura en frontend (función `assertSuperUser()` o equivalente, mismo patrón que el catálogo de categorías).
+
+**Excluye:**
+- No se toca el backend. **AVISO al usuario:** hoy el backend expone `affiliations/` como catálogo (GET, JWT). Se asume un `ModelViewSet` estándar para POST/PATCH/DELETE, pero hay que **verificar el serializer y permisos reales del backend**; si la escritura no está restringida a superadmin, queda como observación a evaluar en backend.
+- No tocar la carpeta clon de TailAdmin, no crear ramas ni git.
+
+## 4. Endpoints del API utilizados
+
+> Catálogo existente: `GET /api/v1/affiliations/` (JWT) ya consumido por `getAdminCatalogs` → `AdminCatalogs.affiliations`. Serializer actual en frontend: `Affiliation = { id, name, city, state, country }`. **Verificar shape real del backend** (¿hay más campos? ¿`name` único?).
+
+| Acción | Método | URL | Auth | Rol frontend |
+|--------|--------|-----|------|-------------|
+| Listar filiaciones | GET | `/api/v1/affiliations/` | JWT | superadmin + admin (select en competiciones) |
+| Crear filiación | POST | `/api/v1/affiliations/` | JWT | **solo superadmin** |
+| Editar filiación | PATCH | `/api/v1/affiliations/{id}/` | JWT | **solo superadmin** |
+| Eliminar filiación | DELETE | `/api/v1/affiliations/{id}/` | JWT | **solo superadmin** |
+
+## 5. Datos / DTOs
+
+- `Affiliation`: `id`, `name` (obligatorio), `city`, `state`, `country`.
+- `AffiliationWritePayload` (nuevo tipo), siguiendo el patrón de `CompetitionCategoryWritePayload`: `{ id?, name, city?, state?, country? }` (ajustar obligatoriedad según el serializer del backend).
+- Consideración de borrado: si la filiación tiene competiciones o atletas asociados, el backend puede restringir el DELETE (`ProtectedError`) → manejar ese error en frontend con un mensaje claro.
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: nuevo tipo `AffiliationWritePayload` (actualizar la shape si el serializer expone más campos).
+- `src/api/admin.ts`: `fetchAffiliations()` (reutiliza el catálogo existente), `createAffiliation()`, `updateAffiliation()`, `deleteAffiliation()` — con `assertSuperUser()` como el catálogo de categorías.
+- Página nueva: `src/pages/admin/AffiliationsPage.tsx` (tabla + modal/formulario estilo TailAdmin, mismo patrón que `CategoriesPage.tsx`).
+- Formulario: `AffiliationFormPage.tsx` o modal con `name`, `city`, `state`, `country`.
+- Menú lateral (solo superadmin): ítem "Filiaciones" → `/admin/affiliations`.
+- Rutas en el router admin con `<RoleGuard>` / condición por `is_superuser`.
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Superadmin ve CRUD | Login superadmin → `/admin/affiliations` | Puede crear/editar/eliminar filiaciones |
+| Admin no ve CRUD | Login admin de competición | `/admin/affiliations` oculto/no accesible; llamadas de escritura → bloqueadas en frontend |
+| Crear filiación | Superadmin crea `name`/`city`/`state`/`country` | Persiste y aparece en el listado y en el select de competiciones |
+| Bloqueo escritura | No-superadmin intenta POST | Frontend no emite la petición (guard por rol) |
+| Borrado en uso | Eliminar filiación con competiciones asociadas | Mensaje de error claro si el backend rechaza (`ProtectedError`) |
+
+## 8. Observaciones / riesgos
+
+- **Restricción de roles SOLO en frontend (por ahora):** se oculta/bloquea la escritura según `is_superuser`, pero **avisar** al usuario que el backend debe restringir la escritura de `AffiliationViewSet` a superadmin para una regla de negocio real.
+- **Verificar shape del backend:** campos exactos y obligatoriedad del serializer `Affiliation` (el tipo actual en frontend solo contempla `name/city/state/country`).
+- **Borrado en uso:** `Competition.affiliation` y `Athlete.affiliation` pueden referenciar la filiación; depende del backend cómo se comporta el DELETE (proteger vs CASCADE). Si es `ProtectedError`, gestionar el error 4xx en la UI.
+- Eliminar una filiación en uso dejaría competiciones/atletas huérfanos si el backend lo permite → considerarlo en la lógica y/o avisar para evaluación backend.
+
+---
+
 # Parte II — Plantilla de especificación de la actualización
 
 ## 1. Título

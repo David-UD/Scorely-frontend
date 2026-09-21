@@ -1,20 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createAffiliation,
   createAthlete,
   createCompetitionCategory,
   createEnabledCompetitionCategory,
   createEvent,
   createTeam,
+  deleteAffiliation,
   deleteAthlete,
   deleteCompetitionCategory,
   deleteEnabledCompetitionCategory,
   deleteEvent,
   deleteTeam,
+  fetchAffiliations,
   fetchAthletes,
   fetchCompetitionCategories,
   fetchEnabledCompetitionCategories,
   fetchEvents,
   fetchTeams,
+  updateAffiliation,
   updateAthlete,
   updateCompetitionCategory,
   updateEnabledCompetitionCategory,
@@ -22,6 +26,7 @@ import {
   updateTeam,
 } from "@/api/admin";
 import type {
+  AffiliationWritePayload,
   CompetitionCategoryWritePayload,
   EnabledCompetitionCategoryWritePayload,
 } from "@/types";
@@ -154,7 +159,47 @@ export function useDeleteTeam(competitionId: number | null) {
   });
 }
 
-// ── Category catalog (superadmin) ───────────────────────────────────────────
+// ── Affiliations (superadmin catalog) ───────────────────────────────────────
+
+export function useAdminAffiliations() {
+  return useQuery({
+    queryKey: ["admin", "affiliations"],
+    queryFn: fetchAffiliations,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateAffiliation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createAffiliation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "affiliations"] });
+    },
+  });
+}
+
+export function useUpdateAffiliation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AffiliationWritePayload) => updateAffiliation(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "affiliations"] });
+    },
+  });
+}
+
+export function useDeleteAffiliation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAffiliation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "affiliations"] });
+    },
+  });
+}
+
+// ── Competition category catalog (superadmin) ───────────────────────────────
 
 export function useAdminCompetitionCategories() {
   return useQuery({

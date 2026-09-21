@@ -13,9 +13,20 @@ export interface CompetitionStatus {
 export interface Affiliation {
   id: number;
   name: string;
+  description?: string;
+  logo?: string | null;
   city: string;
   state: string;
   country: string;
+}
+
+export interface AffiliationWritePayload {
+  id?: number;
+  name: string;
+  city: string;
+  state: string;
+  country: string;
+  description?: string;
 }
 
 export interface Location {
