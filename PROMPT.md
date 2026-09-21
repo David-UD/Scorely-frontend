@@ -12,7 +12,7 @@ Eres **Scorely Frontend**, un frontend developer especializado que implementa ac
 
 ## Alcance del frontend
 
-Cubre: registro/login de usuarios, panel de administración de competiciones (competencias, **catálogo de categorías y categorías habilitadas por competición**, eventos qualifier/final, participantes, resultados) y la **publicación pública de leaderboards** (qualifier/final). **NO** gestiona horarios, heats, jueces ni logística de competición.
+Cubre: registro/login de usuarios, panel de administración de competiciones (competencias, **catálogo de categorías, categorías habilitadas por competición, filiaciones y sedes**, eventos qualifier/final, participantes, resultados) y la **publicación pública de leaderboards** (qualifier/final). **NO** gestiona horarios, heats, jueces ni logística de competición.
 
 ## Tech Stack (fijo — elegido: SPA separada, todo OSS/MIT/Apache-2.0)
 
@@ -46,7 +46,7 @@ El proyecto clonado (`https://github.com/TailAdmin/free-react-tailwind-admin-das
 | Layout del panel `/admin` | `DefaultLayout` + Sidebar accesible colapsable + Header con breadcrumbs, notificaciones y dropdown de usuario |
 | Login / cambio de contraseña | Formularios de autenticación (SignIn) |
 | Dashboard por rol (`/admin/`) | Tarjetas (`Card`) de métricas (competencias, participantes, eventos) |
-| CRUD de competencias, catálogo de categorías y categorías habilitadas | Estilo de tablas (`Table`), formularios y modales |
+| CRUD de competencias, catálogo de categorías, filiaciones y sedes | Estilo de tablas (`Table`), formularios y modales |
 | Etapas y eventos de una competición | Tablas, formularios anidados, `Breadcrumb` (Qualifier/Final por competición) |
 | Participantes / equipos / resultados | Tablas densas, formularios, `Modal`/`Alert` para confirmaciones |
 | Leaderboards públicos (qualifier/final) | **A medida** (página pública, no de TailAdmin) |
@@ -91,6 +91,8 @@ Panel admin (requieren JWT + rol, bajo <RoleGuard>) — sobre layout TailAdmin:
   /admin/                                      → dashboard según rol
   /admin/competitions/...                      → CRUD de competencias (superadmin)
   /admin/categories                            → CRUD del catálogo de categorías (solo superadmin)
+  /admin/affiliations                          → CRUD del catálogo de filiaciones (solo superadmin)
+  /admin/sedes                                 → CRUD del catálogo de sedes (solo superadmin)
   /admin/competition-categories                → categorías habilitadas por competición (admin de competición, con CompetitionScopeSelect)
   /admin/<competition>/...                     → categorías, eventos, participantes, resultados (admin de competición)
 ```
@@ -280,6 +282,77 @@ Administración de **filiaciones** (`Affiliation`): el **superadmin** mantiene e
 - **Verificar shape del backend:** campos exactos y obligatoriedad del serializer `Affiliation` (el tipo actual en frontend solo contempla `name/city/state/country`).
 - **Borrado en uso:** `Competition.affiliation` y `Athlete.affiliation` pueden referenciar la filiación; depende del backend cómo se comporta el DELETE (proteger vs CASCADE). Si es `ProtectedError`, gestionar el error 4xx en la UI.
 - Eliminar una filiación en uso dejaría competiciones/atletas huérfanos si el backend lo permite → considerarlo en la lógica y/o avisar para evaluación backend.
+
+---
+
+# Parte II-D — Módulo admin: Sedes (locations)
+
+## 1. Título
+
+Administración de **sedes** (`Location`): el **superadmin** mantiene el catálogo de sedes (lugar físico de cada competición: `name`, `address`, `city`, `state`, `country`, `latitude`, `longitude`). Página **solo superadmin**, etiqueta en el menú: **"Sedes"**.
+
+## 2. Objetivo
+
+- **Superadmin**: CRUD completo del catálogo de sedes (`/admin/sedes`) — crear, editar y eliminar.
+- **Admin de competición**: NO accede a esta página (defensa en UI).
+- Cada competición referencia una sede (`Competition.location`); es el select existente en `CompetitionFormPage` vía `getAdminCatalogs().locations` y el dato que alimenta el mapa en la vista pública (`LocationMap`).
+
+## 3. Alcance
+
+**Incluye:**
+- Página `/admin/sedes` (solo superadmin): lista y CRUD (crear/editar/eliminar) de `Location`.
+- Menú lateral: ítem **"Sedes"** visible **solo para superadmin** (`user.is_superuser`).
+- Ruta protegida en el router admin con `<RoleGuard>` + condición por `is_superuser`.
+- Guard de escritura en frontend (`assertSuperUser()`, mismo patrón que filiaciones/categorías).
+
+**Excluye:**
+- No se toca el backend. **AVISO al usuario:** hoy el backend expone `locations/` con permiso global `IsAuthenticated` (`LocationViewSet`, model viewset estándar); cualquier usuario autenticado podría escribir. La restricción a superadmin se hace **solo a nivel frontend** en esta iteración y queda como observación que el backend debería bloquear la escritura a no-superadmins (`IsSuperAdmin`).
+- No tocar la carpeta clon de TailAdmin, no crear ramas ni git.
+
+## 4. Endpoints del API utilizados
+
+> **Shape verificado en el backend** (`leader\Scorely/apps/competitions`): `LocationSerializer` = `(id, name, address, city, state, country, latitude, longitude)`; `LocationViewSet` = `ModelViewSet` con `search_fields=('name',)` y `filterset_fields=('city','state','country')`. `name`, `address`, `city`, `state`, `country` son obligatorios; `latitude`/`longitude` son opcionales (Decimal 9,6) y en las vistas llegan como **string o `null`**.
+
+| Acción | Método | URL | Auth | Rol frontend |
+|--------|--------|-----|------|-------------|
+| Listar sedes | GET | `/api/v1/locations/` | JWT | superadmin + admin (select en competiciones) |
+| Obtener sede | GET | `/api/v1/locations/{id}/` | JWT | superadmin (edición) |
+| Crear sede | POST | `/api/v1/locations/` | JWT | **solo superadmin** |
+| Editar sede | PATCH | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
+| Eliminar sede | DELETE | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
+
+## 5. Datos / DTOs
+
+- `Location` (ya existe en el frontend): `id`, `name`, `address?`, `city`, `state`, `country`, `latitude?: number | string | null`, `longitude?: number | string | null`.
+- `LocationWritePayload` (nuevo tipo): `{ id?, name, address?, city, state, country, latitude?, longitude? }` (ajustar según serializer: `address` obligatorio en backend; `latitude`/`longitude` numéricos opcionales, enviarlos solo si hay valor).
+- Consideración de borrado: `Competition.location` usa `on_delete=PROTECT` en el backend → eliminar una sede en uso lanza `ProtectedError` (4xx) → manejar ese error en frontend con un mensaje claro.
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: nuevo tipo `LocationWritePayload` (la shape de `Location` ya existe).
+- `src/api/admin.ts`: `fetchLocations()` (reutiliza el catálogo y refactoriza `getAdminCatalogs()` a un solo origen), `fetchLocation(id)`, `createLocation()`, `updateLocation()`, `deleteLocation()` — con `assertSuperUser()` como filiaciones.
+- `src/hooks/useAdminModules.ts`: `useAdminLocations`, `useCreateLocation`, `useUpdateLocation`, `useDeleteLocation` (invalidar `["admin","locations"]`).
+- Página nueva: `src/pages/admin/LocationsPage.tsx` (tabla + acciones, solo superadmin; patrón de `AffiliationsPage.tsx`).
+- Formulario: `src/pages/admin/LocationFormPage.tsx` (`name`, `address`, `city`, `state`, `country`, `latitude`, `longitude` con transformación `"" / NaN → undefined`).
+- Menú lateral (solo superadmin): ítem **"Sedes"** → `/admin/sedes`, ícono nuevo `MapPinIcon` en `src/components/admin/icons.tsx`.
+- Rutas en el router admin: `/admin/sedes`, `/admin/sedes/new`, `/admin/sedes/:id/edit`.
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Superadmin ve CRUD | Login superadmin → `/admin/sedes` | Puede crear/editar/eliminar sedes |
+| Admin no ve CRUD | Login admin de competición | `/admin/sedes` oculto/no accesible; llamadas de escritura → bloqueadas en frontend |
+| Crear sede | Superadmin crea `name`/`address`/`city`/`state`/`country` (+ coords opcionales) | Persiste y aparece en el listado y en el select de competiciones |
+| Bloqueo escritura | No-superadmin intenta POST | Frontend no emite la petición (guard por rol) |
+| Borrado en uso | Eliminar sede con competiciones asociadas | Mensaje de error claro si el backend rechaza (`ProtectedError`) |
+
+## 8. Observaciones / riesgos
+
+- **Restricción de roles SOLO en frontend (por ahora):** se oculta/bloquea la escritura según `is_superuser`, pero **avisar** al usuario que el backend debe restringir la escritura de `LocationViewSet` a superadmin para una regla de negocio real.
+- **Borrado en uso:** `Competition.location` usa `on_delete=PROTECT`; el DELETE de una sede referenciada falla con 4xx. Gestionar el error en la UI sin romper la lista.
+- **Coordenadas:** llegan de `Location` como `string` o `null` en las vistas; el payload de escritura envía solo números cuando hay valor (el formulario transforma `""`/`NaN` a `undefined`).
+- **Dato demo:** `seed_data.py` crea sedes españolas como texto plano; no existe un catálogo geo (ciudades/estados/países) en el backend — fuera del alcance de esta iteración.
 
 ---
 

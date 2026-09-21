@@ -5,30 +5,35 @@ import {
   createCompetitionCategory,
   createEnabledCompetitionCategory,
   createEvent,
+  createLocation,
   createTeam,
   deleteAffiliation,
   deleteAthlete,
   deleteCompetitionCategory,
   deleteEnabledCompetitionCategory,
   deleteEvent,
+  deleteLocation,
   deleteTeam,
   fetchAffiliations,
   fetchAthletes,
   fetchCompetitionCategories,
   fetchEnabledCompetitionCategories,
   fetchEvents,
+  fetchLocations,
   fetchTeams,
   updateAffiliation,
   updateAthlete,
   updateCompetitionCategory,
   updateEnabledCompetitionCategory,
   updateEvent,
+  updateLocation,
   updateTeam,
 } from "@/api/admin";
 import type {
   AffiliationWritePayload,
   CompetitionCategoryWritePayload,
   EnabledCompetitionCategoryWritePayload,
+  LocationWritePayload,
 } from "@/types";
 
 export function useAdminEvents(competitionId: number | null) {
@@ -195,6 +200,46 @@ export function useDeleteAffiliation() {
     mutationFn: deleteAffiliation,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "affiliations"] });
+    },
+  });
+}
+
+// ── Locations / Sedes (superadmin catalog) ──────────────────────────────────
+
+export function useAdminLocations() {
+  return useQuery({
+    queryKey: ["admin", "locations"],
+    queryFn: fetchLocations,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateLocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createLocation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "locations"] });
+    },
+  });
+}
+
+export function useUpdateLocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: LocationWritePayload) => updateLocation(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "locations"] });
+    },
+  });
+}
+
+export function useDeleteLocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteLocation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "locations"] });
     },
   });
 }

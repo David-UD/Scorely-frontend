@@ -356,6 +356,36 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 
 ---
 
+## Iteración 2026-09-21 — Módulo admin "Sedes" (Parte II-D)
+
+> Ejecución del plan `PLAN.md` (Pasos 0–10). CRUD del catálogo de sedes en `/admin/sedes`, **solo superadmin**. Sin tocar el backend. Pedido del usuario: la administración de locations se muestra como **"Sedes"** en el panel.
+
+### Cambios aplicados
+- `PROMPT.md`: nueva sección **Parte II-D** (endpoints con shape verificado, DTOs, componentes, pruebas, observaciones) + rutas del panel y referencias menores actualizadas.
+- `src/types/index.ts`: nuevo `LocationWritePayload` (`id?`, `name`, `address?`, `city`, `state`, `country`, `latitude?`, `longitude?`).
+- `src/api/admin.ts`: `fetchLocations()` (catálogo, reutilizada por `getAdminCatalogs()`), `fetchLocation(id)`, `createLocation`, `updateLocation`, `deleteLocation` (escrituras con `assertSuperUser()`).
+- `src/hooks/useAdminModules.ts`: `useAdminLocations`, `useCreate/Update/DeleteLocation` (invalidan `["admin","locations"]`).
+- `src/pages/admin/LocationsPage.tsx` (nuevo): tabla Nombre/Dirección/Ciudad/Estado/País/Coordenadas/Acciones, "Nueva sede", confirm + banner de error al borrar (mensaje si está en uso por competiciones), gate superadmin, Spinner/ErrorState/EmptyState.
+- `src/pages/admin/LocationFormPage.tsx` (nuevo): create/edit con react-hook-form + zod (`name/address/city/state/country` requeridos; coords opcionales con `"" / NaN → undefined`), carga en edición, captura de `ApiError`.
+- `src/components/admin/icons.tsx`: nuevo `MapPinIcon`; `AdminSidebar.tsx`: ítem "Sedes" (solo superadmin); `src/App.tsx`: rutas `/admin/sedes[/new/:id/edit]`.
+- Tests: `tests/fixtures.ts` (`makeLocation`); `tests/adminApi.test.ts` (bloque "locations catalog"); `tests/LocationsPage.test.tsx` (nuevo, 5 casos).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run typecheck` | OK |
+| `npm run test` | **80/80** en verde (12 archivos) |
+| `npm run build` | OK |
+
+### Notas
+- **Backend sin restricción por rol**: `LocationViewSet` usa el permiso global `IsAuthenticated` — el "solo superadmin" se aplica **en el frontend** (`assertSuperUser()` + gate en páginas y menú). Para seguridad real conviene `IsSuperUser` en el backend.
+- **Borrado en uso**: `Competition.location` usa `on_delete=PROTECT`; `DELETE` sobre una sede referenciada falla (la UI muestra el banner "Puede estar en uso por competiciones").
+- **Coordenadas**: el backend las devuelve como string o `null`; el formulario solo envía números cuando hay valor.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores

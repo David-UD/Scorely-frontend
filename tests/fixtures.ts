@@ -4,6 +4,7 @@ import type {
   CompetitionCategory,
   EnabledCompetitionCategory,
   Leaderboard,
+  Location,
   EventWod,
   EventResult,
   EventPhase,
@@ -18,6 +19,20 @@ export function makeAffiliation(overrides: Partial<Affiliation> = {}): Affiliati
     city: "Buenos Aires",
     state: "Buenos Aires",
     country: "Argentina",
+    ...overrides,
+  };
+}
+
+export function makeLocation(overrides: Partial<Location> = {}): Location {
+  return {
+    id: 1,
+    name: "Paraná Raquet",
+    address: "Av. Alem 123",
+    city: "Paraná",
+    state: "Entre Ríos",
+    country: "Argentina",
+    latitude: "-31.7333",
+    longitude: "-60.5297",
     ...overrides,
   };
 }

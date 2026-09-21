@@ -323,3 +323,29 @@ El frontend consumía el modelo viejo: `getCompetitionStages` → `/competition-
 - `npm run typecheck` → OK
 - `npm run test` → **70/70** (11 archivos)
 - `npm run build` → OK
+
+## Paso 26 — Módulo admin "Sedes" / Parte II-D (COMPLETADO)
+
+> Implementación de la **Parte II-D** de `PROMPT.md` según `PLAN.md` (sin tocar el backend). Pedido del usuario: "administración de location, se mostrará como 'Sedes', solo habilitado para superuser".
+
+### Reglas de negocio implementadas
+- **Superadmin**: CRUD del catálogo de sedes (`Location`: `name`, `address`, `city`, `state`, `country` obligatorios; `latitude`/`longitude` opcionales) en `/admin/sedes` (más `/admin/sedes/new` y `/admin/sedes/:id/edit`).
+- Restricción de roles en **frontend**: `LocationsPage`/`LocationFormPage` bloquean si no es superadmin y `src/api/admin.ts` lanza error en las escrituras si `user.is_superuser` es falso (`assertSuperUser`).
+- **Borrado en uso**: `Competition.location` usa `on_delete=PROTECT` → `DELETE` de una sede referenciada devuelve 4xx; la UI muestra un banner claro ("Puede estar en uso por competiciones").
+- Decisiones del usuario: ruta `/admin/sedes` (etiqueta "Sedes") y **solo CRUD** (sin "control" de ciudad/estado/país).
+
+### Cambios aplicados
+- **`PROMPT.md`**: nueva sección **Parte II-D** (Título, Objetivo, Alcance con aviso backend, Endpoints shape verificado, DTOs, componentes, pruebas, observaciones); rutas del panel y referencias menores (Alcance §, tabla de réplica) actualizadas.
+- **`src/types/index.ts`**: nuevo `LocationWritePayload` (`id?`, `name`, `address?`, `city`, `state`, `country`, `latitude?`, `longitude?`).
+- **`src/api/admin.ts`**: `fetchLocations()` (`/locations/?page_size=100`), `fetchLocation(id)`, `createLocation`, `updateLocation`, `deleteLocation` (escrituras con `assertSuperUser()`); `getAdminCatalogs()` refactoreado a un único origen de catálogo (`fetchLocations()`).
+- **`src/hooks/useAdminModules.ts`**: `useAdminLocations`, `useCreateLocation`, `useUpdateLocation`, `useDeleteLocation` (invalidan `["admin","locations"]`).
+- **`src/pages/admin/LocationsPage.tsx`** (nuevo): tabla Nombre/Dirección/Ciudad/Estado/País/Coordenadas/Acciones, botón "Nueva sede", confirm + banner de error al borrar, gate superadmin, Spinner/ErrorState/EmptyState.
+- **`src/pages/admin/LocationFormPage.tsx`** (nuevo): create/edit con react-hook-form + zod (`name/address/city/state/country` requeridos; `latitude`/`longitude` opcionales vía `z.preprocess` `""|NaN → undefined` y `valueAsNumber`), carga en edición, captura de `ApiError`.
+- **`src/components/admin/icons.tsx`**: nuevo `MapPinIcon`; `AdminSidebar.tsx`: ítem "Sedes" (solo superadmin); `src/App.tsx`: rutas `/admin/sedes[/new/:id/edit]`.
+- **Tests**: `tests/fixtures.ts` (`makeLocation`), `tests/adminApi.test.ts` (bloque "locations catalog": bloqueo no-superadmin, LIST, POST, PATCH, DELETE), `tests/LocationsPage.test.tsx` (nuevo, 5 casos).
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **80/80** (12 archivos)
+- `npm run build` → OK

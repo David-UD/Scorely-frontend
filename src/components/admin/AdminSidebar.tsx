@@ -9,6 +9,7 @@ import {
   GridIcon,
   GroupIcon,
   ListIcon,
+  MapPinIcon,
   PlugIcon,
   TrophyIcon,
   UsersIcon,
@@ -52,6 +53,12 @@ export default function AdminSidebar() {
             name: "Filiaciones",
             icon: <BuildingIcon />,
             path: "/admin/affiliations",
+            enabled: true,
+          },
+          {
+            name: "Sedes",
+            icon: <MapPinIcon />,
+            path: "/admin/sedes",
             enabled: true,
           },
         ]

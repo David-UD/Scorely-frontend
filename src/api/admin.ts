@@ -16,6 +16,7 @@ import type {
   EventWod,
   EventWritePayload,
   Location,
+  LocationWritePayload,
   Team,
   TeamWritePayload,
 } from "@/types";
@@ -47,12 +48,14 @@ function assertSuperUser(): void {
 }
 
 export async function getAdminCatalogs(): Promise<AdminCatalogs> {
-  const [competitionTypes, statuses, locations] = await Promise.all([
+  const [competitionTypes, statuses] = await Promise.all([
     fetchCatalog<CompetitionType>("/competition-types/"),
     fetchCatalog<CompetitionStatus>("/status-competitions/"),
-    fetchCatalog<Location>("/locations/"),
   ]);
-  const affiliations = await fetchAffiliations();
+  const [affiliations, locations] = await Promise.all([
+    fetchAffiliations(),
+    fetchLocations(),
+  ]);
   return { competitionTypes, statuses, affiliations, locations };
 }
 
@@ -115,6 +118,41 @@ export async function updateAffiliation(
 export async function deleteAffiliation(id: number): Promise<void> {
   assertSuperUser();
   await request<void>(`/affiliations/${id}/`, { method: "DELETE" });
+}
+
+// ── Locations / Sedes (superadmin catalog) ───────────────────────────────────
+
+export async function fetchLocations(): Promise<Location[]> {
+  return fetchCatalog<Location>("/locations/?page_size=100");
+}
+
+export async function fetchLocation(id: number): Promise<Location> {
+  return request<Location>(`/locations/${id}/`);
+}
+
+export async function createLocation(
+  payload: LocationWritePayload,
+): Promise<Location> {
+  assertSuperUser();
+  return request<Location>("/locations/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateLocation(
+  payload: LocationWritePayload,
+): Promise<Location> {
+  assertSuperUser();
+  return request<Location>(`/locations/${payload.id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteLocation(id: number): Promise<void> {
+  assertSuperUser();
+  await request<void>(`/locations/${id}/`, { method: "DELETE" });
 }
 
 // ── Competition category catalog ────────────────────────────────────────────

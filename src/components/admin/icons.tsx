@@ -51,6 +51,15 @@ export function BuildingIcon({ className }: IconProps) {
   );
 }
 
+export function MapPinIcon({ className }: IconProps) {
+  return (
+    <StrokeIcon className={className}>
+      <path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </StrokeIcon>
+  );
+}
+
 export function ListIcon({ className }: IconProps) {
   return (
     <StrokeIcon className={className}>

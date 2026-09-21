@@ -40,6 +40,17 @@ export interface Location {
   longitude?: number | string | null;
 }
 
+export interface LocationWritePayload {
+  id?: number;
+  name: string;
+  address?: string;
+  city: string;
+  state: string;
+  country: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface CompetitionSummary {
   id: number;
   name: string;

@@ -13,6 +13,8 @@ import CategoriesPage from "@/pages/admin/CategoriesPage";
 import CategoryFormPage from "@/pages/admin/CategoryFormPage";
 import AffiliationsPage from "@/pages/admin/AffiliationsPage";
 import AffiliationFormPage from "@/pages/admin/AffiliationFormPage";
+import LocationsPage from "@/pages/admin/LocationsPage";
+import LocationFormPage from "@/pages/admin/LocationFormPage";
 import CompetitionCategoriesPage from "@/pages/admin/CompetitionCategoriesPage";
 import EventsPage from "@/pages/admin/EventsPage";
 import EventFormPage from "@/pages/admin/EventFormPage";
@@ -52,6 +54,9 @@ export default function App() {
           <Route path="/admin/affiliations" element={<AffiliationsPage />} />
           <Route path="/admin/affiliations/new" element={<AffiliationFormPage />} />
           <Route path="/admin/affiliations/:id/edit" element={<AffiliationFormPage />} />
+          <Route path="/admin/sedes" element={<LocationsPage />} />
+          <Route path="/admin/sedes/new" element={<LocationFormPage />} />
+          <Route path="/admin/sedes/:id/edit" element={<LocationFormPage />} />
           <Route path="/admin/events" element={<EventsPage />} />
           <Route path="/admin/events/new" element={<EventFormPage />} />
           <Route path="/admin/events/:id/edit" element={<EventFormPage />} />

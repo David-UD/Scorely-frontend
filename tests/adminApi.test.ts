@@ -2,15 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   createAffiliation,
   createCompetitionCategory,
+  createLocation,
   deleteAffiliation,
   deleteCompetitionCategory,
+  deleteLocation,
   updateAffiliation,
   updateCompetitionCategory,
+  updateLocation,
   createEnabledCompetitionCategory,
   updateEnabledCompetitionCategory,
   deleteEnabledCompetitionCategory,
   fetchEnabledCompetitionCategories,
   fetchAffiliations,
+  fetchLocations,
   fetchAdminCompetitions,
 } from "@/api/admin";
 import { request } from "@/api/client";
@@ -181,6 +185,94 @@ describe("affiliations catalog", () => {
     await deleteAffiliation(9);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/affiliations/9/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("locations catalog", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("blocks catalog writes when user is not superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: false });
+    await expect(
+      createLocation({
+        name: "Paraná Raquet",
+        address: "Av. Alem 123",
+        city: "Paraná",
+        state: "Entre Ríos",
+        country: "Argentina",
+      }),
+    ).rejects.toThrow("No tenés permisos");
+    expect(mockedRequest).not.toHaveBeenCalled();
+  });
+
+  it("fetches the locations catalog", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        { id: 1, name: "Paraná Raquet", city: "Paraná", state: "Entre Ríos", country: "Argentina" },
+      ],
+    });
+    const result = await fetchLocations();
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith("/locations/?page_size=100");
+  });
+
+  it("POSTs a new location when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({
+      id: 9,
+      name: "Paraná Raquet",
+      address: "Av. Alem 123",
+      city: "Paraná",
+      state: "Entre Ríos",
+      country: "Argentina",
+    });
+    await createLocation({
+      name: "Paraná Raquet",
+      address: "Av. Alem 123",
+      city: "Paraná",
+      state: "Entre Ríos",
+      country: "Argentina",
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/locations/",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("PATCHes a location when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue({
+      id: 9,
+      name: "Paraná Raquet",
+      address: "Av. Alem 123",
+      city: "Paraná",
+      state: "Entre Ríos",
+      country: "Argentina",
+    });
+    await updateLocation({
+      id: 9,
+      name: "Paraná Raquet",
+      address: "Av. Alem 123",
+      city: "Paraná",
+      state: "Entre Ríos",
+      country: "Argentina",
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/locations/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("DELETEs a location when superuser", async () => {
+    useAuthStore.getState().setUser({ is_superuser: true });
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteLocation(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/locations/9/",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
