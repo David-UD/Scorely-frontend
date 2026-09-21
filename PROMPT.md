@@ -356,6 +356,73 @@ Administración de **sedes** (`Location`): el **superadmin** mantiene el catálo
 
 ---
 
+# Parte II-E — Vista pública: categorías con recuento de inscritos
+
+## 1. Título
+
+Vista pública del detalle de competición: sección de **categorías habilitadas con recuento de inscritos**, ubicada **antes de la sección Workouts**.
+
+## 2. Objetivo
+
+- Mostrar en `/competitions/:slug/` (`CompetitionDetail`) las **categorías habilitadas** de la competición y, por cada una, **cuántos inscriptos (`Competitor`)** tiene, en una sección propia (título `h2` "Categorías e inscritos", o similar) entre el grid de información/mapa y la sección "Workouts".
+- Enriquecer el detalle público con datos de participación de la competición, consultables **sin autenticación**.
+
+## 3. Alcance
+
+**Incluye:**
+- Nueva sección en `CompetitionDetail` (antes de Workouts): tarjetas/badges de categoría con su recuento (p. ej. `RX Individual — 12`).
+- **Categorías listadas = las mismas del leaderboard público** que ya se muestran hoy (misma fuente, `category.code`/`name`), para no depender de nombres adicionales del backend.
+- Recuento = número de `Competitor` de la competición agrupados por `enabled_competition_category`, contado en frontend.
+- Estados de UI: carga, error y vacío (sin categorías/leaderboard → ocultar la sección o estado vacío, sin romper la página).
+- **Degradación elegante** si `competitors/` aún responde 401/403 (dependencia backend pendiente): tratar como "sin dato" y no romper el resto del detalle.
+
+**Excluye:**
+- No se toca el backend. **AVISO / dependencia backend (decisión del usuario):** abrir la **lectura pública** de `GET /api/v1/competitors/` (hoy JWT-only: `DEFAULT_PERMISSION_CLASSES = IsAuthenticated`). Aplicar `IsAuthenticatedOrReadOnly` (o lectura `AllowAny`) en `CompetitorViewSet`, sin filtrar el queryset por usuario; el usuario aplica el cambio en Django.
+- El recuento publicado es de **inscripciones reales (`Competitor`)**, no las entradas con resultados del leaderboard (decisión del usuario: no usar el conteo del leaderboard como sustituto).
+- No se crea backend nuevo (sin endpoint `count` propio).
+
+## 4. Endpoints del API utilizados
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Inscritos de una competición | GET | `/api/v1/competitors/?competition={id}` | pública **pendiente** (hoy JWT) | `CompetitorSerializer` = `(id, competitor_type, athlete, team, registration_number, competition, enabled_competition_category)`. Páginado (global `PAGE_SIZE` 20) → usar `page_size=100` o recorrer `next`; agrupar por `enabled_competition_category` y contar. |
+
+- Para asociar el recuento (clave `enabled_competition_category` = id) a las categorías **con nombre** del leaderboard se reutiliza el listado de habilitaciones existente: `GET /api/v1/enabled-competition-categories/?competition={id}` (ya cableado en `src/api/public.ts` / `useEnabledCompetitionCategories`) que devuelve `{id, competition, competition_category, finalist_slots}`.
+- ⚠️ **Aviso backend:** ese endpoint y `GET /api/v1/competition-categories/` (catálogo con nombres) son hoy **JWT-only**. Junto con `competitors/` conviene abrir su lectura al público **o** (recomendado) que `EnabledCompetitionCategorySerializer` anide `competition_category` (id + name) para no necesitar abrir el catálogo.
+
+## 5. Datos / DTOs
+
+- `Competitor` (DTO nuevo en frontend): `{ id, competitor_type, athlete?, team?, registration_number, competition, enabled_competition_category }` (`enabled_competition_category` = id de `EnabledCompetitionCategory`).
+- `EnabledCompetitionCategory` (ya existe): `{ id, competition, competition_category, finalist_slots }`.
+- `CategoryRef` (ya existe, del leaderboard): `{ code, name }`.
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: nuevo tipo `Competitor` (shape de §5).
+- `src/api/public.ts`: `getCompetitors(competitionId)` (GET con `auth: false`, `unwrapList` + `page_size=100`).
+- Hook nuevo (patrón `useEnabledCompetitionCategories`): `useCompetitors(competitionId)`.
+- `CompetitionDetail.tsx`: nueva sección "Categorías e inscritos" **antes de Workouts**; helper que agrupa `Competitor[]` por `enabled_competition_category` y une el recuento a las categorías del leaderboard (mismo orden que `LeaderboardFilters`); `Spinner`/`ErrorState`/`EmptyState`.
+- Tests: fixture `makeCompetitor`, bloque nuevo en `tests/publicApi.test.ts`, y casos de la sección en `CompetitionDetail` (carga, con datos, vacío, 401/403).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Detalle sin login | Cargar `/competitions/:slug/` sin token | Muestra las categorías con recuento de inscritos **antes de Workouts** |
+| Recuento correcto | Competición con N inscritos por categoría | Cada categoría muestra su N (inscripciones reales, no entradas del leaderboard) |
+| Sin categorías/leaderboard | Competición sin categorías | Sección oculta o estado vacío; la página no se rompe |
+| Backend aún JWT (401/403) | `competitors/` sin abrir | La sección degrada sin romper el resto del detalle |
+| Inscritos sin resultados | Categoría con inscritos pero sin leaderboard completo | Se muestra la categoría con su recuento |
+
+## 8. Observaciones / riesgos
+
+- **Dependencia backend (decisión del usuario):** `CompetitorViewSet` hoy usa el permiso global `IsAuthenticated` → el GET de inscritos no es público. Hay que **abrir la lectura pública** (el usuario lo aplica manualmente; el frontend no toca backend). Mientras tanto, tratar 401/403 como "sin dato".
+- **Mapeo id→nombre:** el recuento llega por `enabled_competition_category` (id); las categorías del leaderboard tienen nombre/código. Se resuelve con habilitaciones + catálogo (ambos JWT hoy) o, **recomendado**, pidiendo que `EnabledCompetitionCategorySerializer` anide el nombre de la categoría.
+- **Paginación:** `PAGE_SIZE` global = 20 → usar `page_size=100` o recorrer `next` para no subcontar en competiciones grandes (ej. HYROX con miles de inscritos).
+- "Inscritos" (**Competitor**) ≠ "entradas con resultados del leaderboard": pueden diferir mientras no haya resultados todos los inscritos.
+
+---
+
 # Parte II — Plantilla de especificación de la actualización
 
 ## 1. Título

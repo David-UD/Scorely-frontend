@@ -176,6 +176,18 @@ export interface TeamWritePayload {
   competition: number;
 }
 
+export type CompetitorType = "INDIVIDUAL" | "TEAM";
+
+export interface Competitor {
+  id: number;
+  competitor_type: CompetitorType;
+  athlete?: number | null;
+  team?: number | null;
+  registration_number: string;
+  competition: number;
+  enabled_competition_category: number;
+}
+
 export interface CategoryRef {
   id?: number;
   code: string;

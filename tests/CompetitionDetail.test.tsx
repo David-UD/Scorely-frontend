@@ -3,12 +3,32 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { makeCompetition, makeWod, makeLeaderboard, makeEventResult } from "./fixtures";
+import {
+  makeCompetition,
+  makeWod,
+  makeLeaderboard,
+  makeEventResult,
+  makeCompetitionCategory,
+  makeCompetitor,
+  makeEnabledCompetitionCategory,
+} from "./fixtures";
 import CompetitionDetail from "@/pages/public/CompetitionDetail";
 import { useCompetition } from "@/hooks/useCompetition";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useEvents } from "@/hooks/useEvents";
-import type { Competition, EventPhase, EventWod, Leaderboard, LeaderboardStage } from "@/types";
+import { useCompetitors } from "@/hooks/useCompetitors";
+import { useCompetitionCategories } from "@/hooks/useCompetitionCategories";
+import { useEnabledCompetitionCategories } from "@/hooks/useEnabledCompetitionCategories";
+import type {
+  Competition,
+  CompetitionCategory,
+  Competitor,
+  EnabledCompetitionCategory,
+  EventPhase,
+  EventWod,
+  Leaderboard,
+  LeaderboardStage,
+} from "@/types";
 
 vi.mock("@/hooks/useCompetition", () => ({
   useCompetition: vi.fn(),
@@ -19,10 +39,24 @@ vi.mock("@/hooks/useLeaderboard", () => ({
 vi.mock("@/hooks/useEvents", () => ({
   useEvents: vi.fn(),
 }));
+vi.mock("@/hooks/useCompetitors", () => ({
+  useCompetitors: vi.fn(),
+}));
+vi.mock("@/hooks/useCompetitionCategories", () => ({
+  useCompetitionCategories: vi.fn(),
+}));
+vi.mock("@/hooks/useEnabledCompetitionCategories", () => ({
+  useEnabledCompetitionCategories: vi.fn(),
+}));
 
 const mockedUseCompetition = vi.mocked(useCompetition);
 const mockedUseLeaderboard = vi.mocked(useLeaderboard);
 const mockedUseEvents = vi.mocked(useEvents);
+const mockedUseCompetitors = vi.mocked(useCompetitors);
+const mockedUseCompetitionCategories = vi.mocked(useCompetitionCategories);
+const mockedUseEnabledCompetitionCategories = vi.mocked(
+  useEnabledCompetitionCategories,
+);
 
 function result<T>(data: T): UseQueryResult<T> {
   return {
@@ -143,6 +177,13 @@ describe("CompetitionDetail", () => {
     mockedUseCompetition.mockReturnValue(result<Competition>(competition));
     mockEvents(qualifierWods, [finalWod]);
     mockLeaderboards();
+    mockedUseEnabledCompetitionCategories.mockReturnValue(
+      result<EnabledCompetitionCategory[]>([]),
+    );
+    mockedUseCompetitionCategories.mockReturnValue(
+      result<CompetitionCategory[]>([]),
+    );
+    mockedUseCompetitors.mockReturnValue(result<Competitor[]>([]));
   });
 
   it("renders competition information and affiliation", () => {
@@ -287,6 +328,39 @@ describe("CompetitionDetail", () => {
     mockEvents([], []);
     renderDetail();
     expect(screen.getByText("Sin eventos")).toBeInTheDocument();
+  });
+
+  it("shows categories with registered counts before the workouts", () => {
+    const rxEnabled = makeEnabledCompetitionCategory({
+      id: 3,
+      competition: competition.id,
+      competition_category: 1,
+    });
+    mockedUseEnabledCompetitionCategories.mockReturnValue(
+      result<EnabledCompetitionCategory[]>([rxEnabled]),
+    );
+    mockedUseCompetitionCategories.mockReturnValue(
+      result<CompetitionCategory[]>([makeCompetitionCategory({ id: 1, name: "RX" })]),
+    );
+    mockedUseCompetitors.mockReturnValue(
+      result<Competitor[]>([
+        makeCompetitor({ enabled_competition_category: 3 }),
+        makeCompetitor({ id: 2, enabled_competition_category: 3 }),
+      ]),
+    );
+
+    renderDetail();
+
+    expect(
+      screen.getByRole("heading", { name: "Categorías e inscritos" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 inscritos")).toBeInTheDocument();
+
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    const categoriesIndex = headings.findIndex((t) => t === "Categorías e inscritos");
+    const workoutsIndex = headings.findIndex((t) => t === "Workouts");
+    expect(categoriesIndex).toBeGreaterThan(-1);
+    expect(workoutsIndex).toBeGreaterThan(categoriesIndex);
   });
 
   it("renders error state when competition fails to load", () => {

@@ -9,6 +9,7 @@ import WodList from "@/components/public/WodList";
 import CombinedLeaderboardTable from "@/components/public/CombinedLeaderboardTable";
 import LeaderboardFilters from "@/components/public/LeaderboardFilters";
 import LocationMap from "@/components/public/LocationMap";
+import CategoryInscritos from "@/components/public/CategoryInscritos";
 import { useCompetition } from "@/hooks/useCompetition";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useEvents } from "@/hooks/useEvents";
@@ -166,6 +167,10 @@ export default function CompetitionDetail() {
           <LocationMap location={location} />
         </section>
       </div>
+
+      {id !== undefined && categories.length > 0 && (
+        <CategoryInscritos competitionId={id} categories={categories} />
+      )}
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold text-gray-900">Workouts</h2>

@@ -386,6 +386,38 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 
 ---
 
+## Iteración 2026-09-21 — Vista pública: categorías con recuento de inscritos (Parte II-E)
+
+> Ejecución del plan `PLAN.md` (Pasos 0–8). La vista pública `/competitions/:slug/` muestra **antes de Workouts** las categorías habilitadas (orden del leaderboard) con la cantidad de inscritos en cada una. Sin tocar el backend.
+
+### Decisiones del usuario
+1. **Backend**: abrir la lectura pública de `GET /competitors/` (aplicará el usuario).
+2. **Categorías a listar**: las del **leaderboard** (mismo orden que `LeaderboardFilters`).
+
+### Cambios aplicados
+- `src/types/index.ts`: `CompetitorType` (`"INDIVIDUAL" | "TEAM"`) y `Competitor`.
+- `src/api/public.ts`: `getCompetitionCategories()` (`/competition-categories/?page_size=100`, sin auth) y `getCompetitors(competitionId)` (`/competitors/?competition&page_size=100` con **loop de paginación** por `next`/`page`; sin auth).
+- `src/hooks/useCompetitors.ts` y `src/hooks/useCompetitionCategories.ts` (nuevos).
+- `src/utils/categoryCounts.ts` (nuevo): `buildCategoryCounts` — recuento de `Competitor` por `enabled_competition_category`, nombre resuelto **por nombre** (join catálogo → habilitación → inscritos), conservando el orden del leaderboard; 0 si no hay coincidencia.
+- `src/components/public/CategoryInscritos.tsx` (nuevo): sección "Categorías e inscritos" con `Badge` por categoría (`N inscrito(s)`), Spinner en carga, oculta en error (degradación elegante) y sin categorías.
+- `src/pages/public/CompetitionDetail.tsx`: integra la sección **antes de Workouts**.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run typecheck` | OK |
+| `npm run test` | **93/93** en verde (14 archivos) |
+| `npm run build` | OK (Vite 6.4.3) |
+
+### Notas
+- **Recuento ≠ resultado**: "inscritos" cuenta `Competitor` (inscripciones), no apoya con el leaderboard.
+- **Sin serializer anidado**: `EnabledCompetitionCategory.competition_category` es id numérico (el admin lo consume como número); el nombre se resuelve por catálogo.
+- **Aviso backend**: los endpoints `competitors/`, `enabled-competition-categories/` y `competition-categories/` están hoy tras el global `IsAuthenticated` (`config/settings/base.py:86-88`). Para ver datos reales, abrir lectura pública con `IsAuthenticatedOrReadOnly` en `CompetitorViewSet` (`apps/participants/views.py`), `EnabledCompetitionCategoryViewSet` y `CompetitionCategoryViewSet` (`apps/events/views.py`). Hasta entonces la sección se oculta sin romper.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -402,6 +434,8 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 - [x] no se tocó `free-react-tailwind-admin-dashboard/`
 - [x] (2026-09-15) módulo admin de categorías disponibles: catálogo solo superadmin; habilitación + `finalist_slots` por competición para admin de competición
 - [x] (2026-09-21) módulo admin de filiaciones: CRUD del catálogo en `/admin/affiliations` solo superadmin (Parte II-C)
+- [x] (2026-09-21) módulo admin de sedes: CRUD del catálogo en `/admin/sedes` solo superadmin (Parte II-D)
+- [x] (2026-09-21) vista pública: categorías habilitadas con recuento de inscritos antes de Workouts, con degradación elegante si el backend aún no expone los endpoints en lectura pública (Parte II-E)
 
 ## No se tocó
 
@@ -417,3 +451,4 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 5. (Opcional) Playwright e2e: no instalado en esta iteración (requiere descargar navegadores).
 6. (Siguiente iteración) CRUD completo del panel `/admin` sobre el layout TailAdmin.
 7. **(Hecho, 2026-09-15)** Refactor del frontend al nuevo modelo: eliminadas `competition-stages`/`competition_stage`/`CompetitionStage` del código fuente; consumir `events?competition&phase`, `enabled-competition-categories` (con `finalist_slots`) y `event_results[]` como objetos.
+8. **(Pendiente, Parte II-E)** Abrir la lectura pública del los endpoints `competitors/`, `enabled-competition-categories/` y `competition-categories/` (`IsAuthenticatedOrReadOnly` en sus viewsets) para que la sección "Categorías e inscritos" muestre datos reales.

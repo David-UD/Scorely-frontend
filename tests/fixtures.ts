@@ -2,6 +2,7 @@ import type {
   Affiliation,
   Competition,
   CompetitionCategory,
+  Competitor,
   EnabledCompetitionCategory,
   Leaderboard,
   Location,
@@ -57,6 +58,19 @@ export function makeEnabledCompetitionCategory(
     competition: 1,
     competition_category: 1,
     finalist_slots: 2,
+    ...overrides,
+  };
+}
+
+export function makeCompetitor(overrides: Partial<Competitor> = {}): Competitor {
+  return {
+    id: 1,
+    competitor_type: "INDIVIDUAL",
+    athlete: 10,
+    team: null,
+    registration_number: "001",
+    competition: 1,
+    enabled_competition_category: 1,
     ...overrides,
   };
 }

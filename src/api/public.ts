@@ -2,6 +2,8 @@ import { request, buildQuery, ApiError, type QueryParams } from "./client";
 import type {
   CategoryRef,
   Competition,
+  CompetitionCategory,
+  Competitor,
   EnabledCompetitionCategory,
   EventPhase,
   EventWod,
@@ -72,6 +74,36 @@ export async function getEnabledCompetitionCategories(
     { auth: false },
   );
   return unwrapList(data);
+}
+
+export async function getCompetitionCategories(): Promise<CompetitionCategory[]> {
+  const data = await request<CompetitionCategory[] | Page<CompetitionCategory>>(
+    `/competition-categories/${buildQuery({ page_size: 100 })}`,
+    { auth: false },
+  );
+  return unwrapList(data);
+}
+
+export async function getCompetitors(
+  competitionId: number | string,
+): Promise<Competitor[]> {
+  const collected: Competitor[] = [];
+  let page = 1;
+  for (;;) {
+    const params: QueryParams = { competition: competitionId, page_size: 100 };
+    if (page > 1) params.page = page;
+    const data = await request<Page<Competitor>>(
+      `/competitors/${buildQuery(params)}`,
+      { auth: false },
+    );
+    collected.push(...(data.results ?? []));
+    if (!data.next) break;
+    const nextUrl = new URL(data.next);
+    const nextPage = Number(nextUrl.searchParams.get("page") ?? page + 1);
+    if (!Number.isFinite(nextPage) || nextPage <= page) break;
+    page = nextPage;
+  }
+  return collected;
 }
 
 function slugify(value: string): string {

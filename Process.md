@@ -349,3 +349,44 @@ El frontend consumía el modelo viejo: `getCompetitionStages` → `/competition-
 - `npm run typecheck` → OK
 - `npm run test` → **80/80** (12 archivos)
 - `npm run build` → OK
+
+## Paso 27 — Parte II-E: vista pública "categorías e inscritos" (COMPLETADO)
+
+> Implementación de la **Parte II-E** de `PROMPT.md` según `PLAN.md` (sin tocar el backend). Sección nueva en `/competitions/:slug/` **antes de Workouts** que muestra las categorías habilitadas (en el orden del leaderboard overall / `LeaderboardFilters`) con el **recuento de inscritos** (`Competitor` agrupados por `enabled_competition_category`).
+
+### Requerimiento
+- Mostrar las categorías habilitadas de la competición junto con la cantidad de inscritos en cada una.
+- Decisiones del usuario (preguntas 2026-09-21):
+  1. **Backend**: abrir la lectura pública de `GET /competitors/` con `IsAuthenticatedOrReadOnly` (patrón igual a `CompetitionViewSet`/`EventViewSet`) — cambio que aplica el usuario; este paso solo avisa y documenta.
+  2. **Categorías a listar**: las del **leaderboard** (mismo orden que `LeaderboardFilters`), no el catálogo completo.
+- Recuento: cuenta `Competitor` por `enabled_competition_category`, resolviendo el nombre de la categoría **por nombre** (join catálogo `CompetitionCategory` → `EnabledCompetitionCategory` → `Competitor`). No se usa serializer anidado porque `EnabledCompetitionCategory.competition_category` es un **id numérico** que el admin consume como tal.
+
+### Cambios aplicados
+- **`src/types/index.ts`**: `CompetitorType` (`"INDIVIDUAL" | "TEAM"`) y `Competitor` (`athlete`/`team` opcionales null).
+- **`src/api/public.ts`**:
+  - `getCompetitionCategories()` → `/competition-categories/?page_size=100` (`auth: false`, desempaqueta lista/página).
+  - `getCompetitors(competitionId)` → `/competitors/?competition={id}&page_size=100` con **loop de paginación** (lee `next` y su `page`, corta si no avanza); `auth: false`.
+- **Hooks** (nuevos): `src/hooks/useCompetitors.ts` (`["competitors", id]`, `enabled` por id válido) y `src/hooks/useCompetitionCategories.ts` (`["competition-categories"]`, catálogo cacheado).
+- **`src/utils/categoryCounts.ts`** (nuevo): `buildCategoryCounts({categories, enabled, catalog, competitors})` → `CategoryCount[] {code,name,count}` conservando el orden de `categories`; 0 si no hay coincidencia.
+- **`src/components/public/CategoryInscritos.tsx`** (nuevo): sección `h2` "Categorías e inscritos" (aria-label igual); `Badge tone="brand"` con `N inscrito(s)` por categoría; Spinner mientras carga; **si falla la carga se oculta** (degradación elegante); nada si `categories` está vacío.
+- **`src/pages/public/CompetitionDetail.tsx`**: integra `<CategoryInscritos>` justo **antes** de la sección Workouts, cuando hay `id` y categorías disponibles.
+
+### Tests (+13, 80 → **93**)
+- `tests/fixtures.ts`: `makeCompetitor`.
+- `tests/publicApi.test.ts`: bloques `getCompetitionCategories` (URL + unwrap) y `getCompetitors` (URL `auth:false` **sin** `auth`, y “walks the pagination” que recorre `next`).
+- `tests/categoryCounts.test.ts` (nuevo, 4): join por nombre catálogo→habilitación→inscritos, orden de las categorías del leaderboard, categoría sin coincidencia → 0, habilitación sin inscritos → 0.
+- `tests/CategoryInscritos.test.tsx` (nuevo, 5): heading + badge por categoría con recuento (singular/plural), orden de las chips, spinner en carga, **oculto en error**, oculto sin categorías.
+- `tests/CompetitionDetail.test.tsx`: mock de los 3 hooks nuevos (defaults vacíos) + test de integración que verifica heading, `2 inscritos` y que "Categorías e inscritos" aparece antes que "Workouts".
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **93/93** (14 archivos)
+- `npm run build` → OK (Vite 6.4.3; warning de chunk >500 kB preexistente)
+
+### Aviso al usuario (backend)
+Para que la sección muestre datos reales, abrir la lectura pública en `leader\Scorely` con `permission_classes = [IsAuthenticatedOrReadOnly]` (import de `rest_framework.permissions`) en los 3 viewsets que hoy caen en el global `IsAuthenticated` (`config/settings/base.py:86-88`):
+- `CompetitorViewSet` (`apps/participants/views.py`) → habilita `GET /competitors/` público.
+- `EnabledCompetitionCategoryViewSet` (`apps/events/views.py`) → `GET /enabled-competition-categories/` público.
+- `CompetitionCategoryViewSet` (`apps/events/views.py`) → `GET /competition-categories/` público.
+Hasta entonces el frontend degrada (oculta la sección) sin romper la página.

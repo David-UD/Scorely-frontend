@@ -1,13 +1,13 @@
-# PLAN — Ejecución de `PROMPT.md` (Scorely Frontend) — Módulo admin "Sedes"
+# PLAN — Ejecución de `PROMPT.md` (Scorely Frontend) — Vista pública: categorías con recuento de inscritos
 
 > **Documento de planificación, no ejecuta cambios.** Describe, paso a paso,
-> cómo implementar la indicación de `PROMPT.md` para el **módulo admin de
-> Sedes/Locations** (`Parte II-D`) sobre `Scorely-frontend/`, indicando el
-> **estado actual** de cada parte y detallando el trabajo **pendiente**.
+> cómo implementar la indicación de `PROMPT.md` para la **Parte II-E** sobre
+> `Scorely-frontend/`, indicando el **estado actual** de cada parte y detallando
+> el trabajo **pendiente**.
 >
 > Fecha: 2026-09-21
-> Estado: ✅ **COMPLETADO** — Pasos 0–10 ejecutados sobre el código y verificados
-> (lint/typecheck/test/build → 80/80; ver `Process.md` Paso 26 y `RESULTADOS.md`).
+> Estado: BORRADOR / pendiente de ejecución (Parte II-E sin implementar en el código;
+> ya documentada en `PROMPT.md`)
 
 ---
 
@@ -17,445 +17,410 @@
 
 | Sección                                    | Módulo | Estado |
 |--------------------------------------------|--------|--------|
-| **Parte II** — Pantalla pública            | Público (`/`, `/competitions/:slug/`, leaderboards) | ✅ **COMPLETADO** (ver `Process.md` Pasos 0–24 y `RESULTADOS.md`; commits `0565eb1`…`bf7d27f`) |
-| **Parte II-B** — Categorías disponibles    | Admin (`/admin/categories` + `/admin/competition-categories`) | ✅ **COMPLETADO** | 
-| **Parte II-C** — Filiaciones (`Affiliation`) | Admin (`/admin/affiliations`) | ✅ **COMPLETADO** (ver `Process.md` Paso 25 y `RESULTADOS.md` iteración 2026-09-21; suite 70/70) |
-| **Parte II-D** — Sedes (`Location`)        | Admin (`/admin/sedes`) | ✅ **COMPLETADO** (ver `Process.md` Paso 26 y `RESULTADOS.md` iteración 2026-09-21; suite 80/80) |
+| **Parte II** — Pantalla pública            | Público (`/`, `/competitions/:slug/`, leaderboards) | ✅ **COMPLETADO** (ver `Process.md` Pasos 0–24 y `RESULTADOS.md`) |
+| **Parte II-B** — Categorías disponibles    | Admin (`/admin/categories` + `/admin/competition-categories`) | ✅ **COMPLETADO** |
+| **Parte II-C** — Filiaciones (`Affiliation`) | Admin (`/admin/affiliations`) | ✅ **COMPLETADO** (suite 70/70 al cierre) |
+| **Parte II-D** — Sedes (`Location`)        | Admin (`/admin/sedes`) | ✅ **COMPLETADO** (suite 80/80 al cierre) |
+| **Parte II-E** — Categorías con recuento de inscritos | Público (detalle de competición) | ⏳ **PENDIENTE** (objeto de este plan) |
 
 Este plan:
-1. Documenta el **estado alcanzado** de las partes ya implementadas (para no rehacerlas).
-2. **Paso 0:** especifica escribir la **Parte II-D en `PROMPT.md`** (hoy el archivo
-   NO la contiene — pedido previo del usuario: "actualiza @PROMPT.md agrega la
-   administración de location").
-3. Detalla **paso a paso** la implementación de la Parte II-D (módulo admin de
-   sedes), replicando el patrón ya probado de Filiaciones (Parte II-C).
-4. Incluye los pasos de **verificación** completos (lint/typecheck/test/build).
+1. Documenta el **estado alcanzado** de la Parte II-E (spec en `PROMPT.md` ya escrita; backend shape verificado).
+2. Detalla **paso a paso** la implementación en frontend: sección "Categorías e inscritos" en
+   `/competitions/:slug/` ubicada **antes de la sección Workouts**, con recuento de
+   inscritos por categoría.
+3. Incluye los pasos de **verificación** completos (lint/typecheck/test/build).
 
-### Regla clave repetida de `PROMPT.md` / decisiones del usuario
-- **Quién crea/edita/elimina sedes = superadmin** (`user.is_superuser`). El admin
-  de competición **NO** accede a `/admin/sedes`. La restricción se implementa
-  **en frontend** (ocultar menú + guard de escritura) porque el backend hoy
-  expone `locations/` con permiso global (`IsAuthenticated`). **Avisar al
-  usuario** de que el backend debería restringir la escritura a superadmin.
-- Decisiones tomadas por el usuario (2026-09-21):
-  - Ruta del módulo: **`/admin/sedes`** (etiqueta en menú: **"Sedes"**).
-  - Alcance: **solo CRUD** (igual a Filiaciones). **NO** incluir en esta
-    iteración el "control" de ciudad/estado/país (sugerencias de valores).
+### Reglas clave repetidas de `PROMPT.md` / decisiones del usuario
+- **Listado = categorías del leaderboard público** (mismas categorías y orden que ya
+  muestra `LeaderboardFilters`), no se lista el catálogo completo.
+- **Recuento = inscripciones reales (`Competitor`)** agrupadas por
+  `enabled_competition_category` (decisión del usuario: **no** usar las entradas con
+  resultados del leaderboard y **no** crear un endpoint `count` nuevo en backend).
+- **Dependencia backend (la aplica el usuario, NO el frontend):** abrir la **lectura
+  pública** de `GET /api/v1/competitors/` (hoy JWT-only). Junto con él, también abrir
+  lectura pública de `enabled-competition-categories/` y `competition-categories/`
+  (ver Paso 0 y Avisos §8).
+- Hasta que el backend esté abierto, el frontend **degrada con elegancia** (oculta la
+  sección) sin romper el resto del detalle.
 
 ---
 
 ## 1. Estado actual (análisis del repositorio, verificado en el código)
 
-### Backend `Location` (shape verificado — `leader\Scorely`, solo lectura)
-- `apps/competitions/models.py:30-43`: `name` (CharField 200, requerido),
-  `address` (CharField 300, requerido), `city`/`state`/`country` (CharField 100,
-  requeridos), `latitude`/`longitude` (Decimal 9,6, **null/blank**).
-- `apps/competitions/serializers.py:19-22`: `LocationSerializer` expone
-  `(id, name, address, city, state, country, latitude, longitude)`.
-- `apps/competitions/views.py:32-36`: `LocationViewSet` = `ModelViewSet` con
-  `search_fields=('name',)` y `filterset_fields=('city','state','country')`, sin
-  `permission_classes` propios → permiso global `IsAuthenticated`
-  (cualquier usuario autenticado puede escribir).
-- `apps/competitions/models.py:62`: `Competition.location` es FK con
-  `on_delete=PROTECT` → **borrar una sede en uso → `ProtectedError` (4xx)**.
-- Seed demo (`seed_data.py`): crea sedes españolas (Madrid, Sevilla, …) como strings.
+### Backend (shape verificado — `leader\Scorely\apps`, solo lectura)
+- `participants/models.py:58-88` → `Competitor`: `competitor_type`
+  (`INDIVIDUAL`/`TEAM`), `athlete?`, `team?`, `registration_number`, `competition`
+  (FK), `enabled_competition_category` (FK a `events.EnabledCompetitionCategory`,
+  `on_delete=PROTECT`). **Es la inscripción.**
+- `participants/serializers.py:24-30` → `CompetitorSerializer` =
+  `(id, competitor_type, athlete, team, registration_number, competition, enabled_competition_category)`.
+- `participants/views.py:50-54` → `CompetitorViewSet`: **sin `permission_classes`** →
+  usa el global `IsAuthenticated` (`config/settings/base.py:86-88`). `filterset_fields =
+  ('competition', 'competitor_type', 'enabled_competition_category')`.
+- `events/models.py:16-39` → `EnabledCompetitionCategory`: `competition`,
+  `competition_category` (FK → `CompetitionCategory`), `finalist_slots`.
+- `events/serializers.py:17-20` → `EnabledCompetitionCategorySerializer` =
+  `(id, competition, competition_category, finalist_slots)`, **`competition_category` =
+  id (número)**, NO incluye el nombre.
+- `events/views.py:21-30` → `CompetitionCategoryViewSet` y
+  `EnabledCompetitionCategoryViewSet`: **sin `permission_classes`** → JWT-only.
+- `events/serializers.py:11-14` → `CompetitionCategorySerializer` =
+  `(id, name, min_members, max_members)` (catálogo con nombres).
+- `rankings/serializers.py:37-43` → el leaderboard público (`/leaderboards/...`) devuelve
+  el bloque `category` = **`CompetitionCategory.name`** (string) por cada categoría
+  habilitada, iterando sobre todas las `EnabledCompetitionCategory` de la competición
+  (incluso con 0 inscritos — `competition_ranking_service.py:94-99`). **Fuente del nombre
+  y del orden = el leaderboard `final/`**.
+- Patrón de permisos ya usado por el usuario: `IsAuthenticatedOrReadOnly` en
+  `CompetitionViewSet` (`competitions/views.py:46`) y `EventViewSet`
+  (`events/views.py:34`) (registrado en `Scorely/Process.md` — "Opción A").
 
 ### Frontend (lo que ya existe)
-- `src/types/index.ts:32-41`: tipo `Location` (`id`, `name`, `address?`, `city`,
-  `state`, `country`, `latitude?: number | string | null`,
-  `longitude?: number | string | null`). **NO existe** `LocationWritePayload`.
-- `src/api/admin.ts:49-57`: `getAdminCatalogs()` ya hace `GET /locations/` vía
-  `fetchCatalog<Location>` para el select "Sede" de `CompetitionFormPage`
-  (`AdminCatalogs.locations`). **NO existen** `fetchLocation(s)`,
-  `createLocation`, `updateLocation`, `deleteLocation`.
-- `assertSuperUser()` ya existe en `src/api/admin.ts:43` → se reutiliza.
-- No hay `src/pages/admin/LocationsPage.tsx` ni `LocationFormPage.tsx`.
-- No hay ruta `/admin/sedes` en `src/App.tsx` ni ítem "Sedes" en
-  `AdminSidebar.tsx`. No hay ícono de ubicación en `icons.tsx`.
-- No hay fixtures ni tests de sedes.
-- Patrón a replicar (Parte II-C implementada): `AffiliationsPage.tsx` +
-  `AffiliationFormPage.tsx` + hooks de filiaciones
-  (`useAdminModules.ts:162-200` con invalidación `["admin","affiliations"]`).
+- `src/pages/public/CompetitionDetail.tsx`: orden de secciones — header (líneas 113-128),
+  grid "Información general" + "Ubicación" (130-168), **"Workouts" (170-204)**,
+  "Leaderboard" (206-246). Las categorías vienen de `combinedLeaderboards` →
+  `buildCombinedLeaderboards(overall)` (40-51) → `CategoryRef {code, name}`; orden = el
+  del payload `/final/`.
+- `src/api/public.ts`: `request(..., { auth: false })`, `unwrapList`, `buildQuery`;
+  `getEnabledCompetitionCategories(competitionId)` (67-75). **NO hay** `getCompetitors`
+  ni catálogo público `getCompetitionCategories`.
+- `src/hooks/useEnabledCompetitionCategories.ts` (patrón: queryKey
+  `["enabled-competition-categories", id]`, `enabled` condicional). Existen también
+  `useCompetition`, `useLeaderboard`, `useEvents`.
+- `src/types/index.ts`: `CompetitionCategory` (92-98), `EnabledCompetitionCategory`
+  (100-105, `competition_category: number`), `CategoryRef`, `Leaderboard`. **NO existe**
+  el tipo `Competitor`.
+- `tests/`: patrón `queryResult` + `renderWithProviders` (`tests/utils.tsx`); fixtures
+  `makeCompetitionCategory` (ya existe, fixtures.ts:25) y `makeLeaderboard`; `publicApi.test.ts`
+  verifica `request(..., { auth: false })`; `CompetitionDetail.test.tsx` mockea los 3
+  hooks públicos (useCompetition/useLeaderboard/useEvents).
 
 ---
 
-## 2. Parte II-D — Objetivo y reglas de negocio
+## 2. Parte II-E — Objetivo y reglas de negocio
 
 | Regla de negocio | Quién | Dónde |
-|-------------------|-------|-------|
-| **CRUD del catálogo de sedes** (`Location`: `name`, `address`, `city`, `state`, `country`, `latitude`, `longitude`) | **Solo superadmin** | `/admin/sedes` |
-| Leer sedes para selects (competencias → "Sede") | Superadmin + admin | `getAdminCatalogs` (ya existe, no cambia) |
-| Borrado en uso | Backend: `PROTECT` en `Competition.location` → `ProtectedError` 4xx | Manejar error en UI con mensaje claro |
+|------------------|-------|-------|
+| Mostrar las categorías habilitadas con **recuento de inscritos** en el detalle público | Público (sin login) | `/competitions/:slug/`, sección "Categorías e inscritos" **antes de Workouts** |
+| Recuento = número de `Competitor` de la competición por `enabled_competition_category` | Público | `GET /competitors/?competition={id}` (dependencia backend) |
+| Categorías listadas = las del leaderboard público (`category.{code,name}`, mismo orden que `LeaderboardFilters`) | Público | Leaderboard `/final/` (ya existente) |
+| Graduación: si faltan los datos (401/403/vacíos) → ocultar/estado vacío, no romper la página | Público | `CompetitionDetail` + componente nuevo |
 
-Regla clave: el admin de competición **NO** accede a `/admin/sedes`. La defensa es
-**solo en frontend** (ocultar menú + `assertSuperUser()` en las escrituras de la
-API). El backend no restringe por rol: **avisar al usuario**.
+Regla clave: **no se toca el backend**. La apertura de lectura pública es del usuario;
+el frontend implementa el conteo y el mapeo id→nombre.
 
 ---
 
-## 3. Matriz de archivos (Parte II-D)
+## 3. Matriz de archivos (Parte II-E)
 
 | Archivo | Tipo | Cambio |
 |---------|------|--------|
-| `PROMPT.md` | Modificar | **Paso 0:** añadir la sección `Parte II-D — Módulo admin: Sedes (locations)` + rutas/refs menores |
-| `src/types/index.ts` | Modificar | Añadir `LocationWritePayload` (la shape de `Location` ya existe y es correcta) |
-| `src/api/admin.ts` | Modificar | `fetchLocations()`, `fetchLocation(id)`, `createLocation`, `updateLocation`, `deleteLocation` (escrituras con `assertSuperUser()`); reutilizar `fetchLocations()` dentro de `getAdminCatalogs()` |
-| `src/hooks/useAdminModules.ts` | Modificar | `useAdminLocations`, `useCreateLocation`, `useUpdateLocation`, `useDeleteLocation` (invalidar `["admin","locations"]`) |
-| `src/pages/admin/LocationsPage.tsx` | **Crear** | Tabla + acciones, solo superadmin (replicar `AffiliationsPage`) |
-| `src/pages/admin/LocationFormPage.tsx` | **Crear** | Form create/edit react-hook-form + zod (replicar `AffiliationFormPage`) |
-| `src/App.tsx` | Modificar | Rutas `/admin/sedes`, `/admin/sedes/new`, `/admin/sedes/:id/edit` |
-| `src/components/admin/AdminSidebar.tsx` | Modificar | Ítem "Sedes" (solo superadmin) → `/admin/sedes` |
-| `src/components/admin/icons.tsx` | Modificar | Ícono nuevo `MapPinIcon` (patrón `StrokeIcon`) |
-| `tests/fixtures.ts` | Modificar | `makeLocation(overrides)` |
-| `tests/adminApi.test.ts` | Modificar | Bloque "locations catalog": CRUD + bloqueo no-superadmin |
-| `tests/LocationsPage.test.tsx` | **Crear** | Tests de UI (superadmin/admin, estados, borrado con error) |
-| `tests/LocationFormPage.test.tsx` | **Crear** (opcional) | Tests del formulario (validación, submit) |
-| `Process.md` | Modificar | Registrar avances |
+| `src/types/index.ts` | Modificar | Añadir tipo `Competitor` |
+| `src/api/public.ts` | Modificar | `getCompetitors(competitionId)` (con recorrido de paginación) y `getCompetitionCategories()` (catálogo público) |
+| `src/hooks/useCompetitors.ts` | **Crear** | Hook de inscritos (patrón `useEnabledCompetitionCategories`) |
+| `src/hooks/useCompetitionCategories.ts` | **Crear** | Hook del catálogo (patrón idem) |
+| `src/utils/categoryCounts.ts` | **Crear** | `buildCategoryCounts(...)` — util puro del mapeo y conteo |
+| `src/components/public/CategoryInscritos.tsx` | **Crear** | Sección "Categorías e inscritos" (tarjetas/badges con recuento) |
+| `src/pages/public/CompetitionDetail.tsx` | Modificar | Insertar `<CategoryInscritos />` **antes de la sección Workouts** |
+| `tests/fixtures.ts` | Modificar | `makeCompetitor(overrides)` |
+| `tests/publicApi.test.ts` | Modificar | Bloques `getCompetitors` y `getCompetitionCategories` (URLs + `auth:false` + paginación) |
+| `tests/categoryCounts.test.ts` | **Crear** | Unit del mapeo (join por nombre, 0, sin match) |
+| `tests/CategoryInscritos.test.tsx` | **Crear** | Componente (carga, datos, error→oculto, vacío) |
+| `tests/CompetitionDetail.test.tsx` | Modificar | Mockear los 3 hooks nuevos (no romper existentes) + caso "sección antes de Workouts" |
+| `Process.md` | Modificar | Registrar avances (nuevo Paso) |
 | `RESULTADOS.md` | Modificar | Registrar resultado y avisos al terminar |
 
 ---
 
-## 4. Pasos detallados (Parte II-D)
+## 4. Pasos detallados (Parte II-E)
 
-### Paso 0 — Documentar la Parte II-D en `PROMPT.md` (documentación, NO implementación)
+### Paso 0 — Avisos backend y verificación de shape (informativo, NO ejecutar backend)
 
-**Qué hacer**: escribir la nueva sección `# Parte II-D — Módulo admin: Sedes (locations)`
-insertada **después de la Parte II-C** (tras la línea 283, antes de
-`# Parte II — Plantilla de especificación`), con la misma estructura de la II-C:
+**Qué hacer**: comunicar al usuario los **avisos/dependencias backend** necesarios para
+que el recuento sea real (hoy son JWT-only). No se ejecuta nada del backend.
 
-1. **1. Título**: Administración de **sedes** (`Location`), **solo superadmin**.
-2. **2. Objetivo**: CRUD completo en `/admin/sedes` (name, address, city, state,
-   country, latitude/longitude); admin de competición NO accede; la sede alimenta
-   el select de `CompetitionFormPage` y el mapa público (`LocationMap`).
-3. **3. Alcance** (Incluye/Excluye): páginas, menú, ruta protegida, guard
-   `assertSuperUser()`; **Excluye**: backend, con el **aviso** ya definido
-   (`LocationViewSet` = `IsAuthenticated` global).
-4. **4. Endpoints del API** (shape verificado):
-   | Acción | Método | URL | Auth | Rol frontend |
-   |--------|--------|-----|------|-------------|
-   | Listar sedes | GET | `/api/v1/locations/` | JWT | superadmin + admin (select) |
-   | Obtener sede | GET | `/api/v1/locations/{id}/` | JWT | superadmin (edición) |
-   | Crear sede | POST | `/api/v1/locations/` | JWT | **solo superadmin** |
-   | Editar sede | PATCH | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
-   | Eliminar sede | DELETE | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
-5. **5. Datos / DTOs**: `Location` (existing shape) + `LocationWritePayload`
-   `{ id?, name, address?, city, state, country, latitude?, longitude? }`
-   (ojo: `address` es obligatorio en el backend; `latitude`/`longitude`
-   opcionales y llegan como string o null).
-6. **6. Cambios en componentes/estructura**: lista de la matriz del plan.
-7. **7. Pruebas requeridas** (tabla escenarios).
-8. **8. Observaciones / riesgos**: role-restriction solo frontend (aviso),
-   `PROTECT` de `Competition.location` → mensaje de error claro, coords string/null.
+1. **`CompetitorViewSet`** (`participants/views.py:50`) — **dependencia principal
+   (decisión del usuario ya tomada):** abrir la lectura pública con
+   `IsAuthenticatedOrReadOnly` (mismo patrón que `CompetitionViewSet`/`EventViewSet`).
+   Por defecto hoy: JWT (`DEFAULT_PERMISSION_CLASSES = IsAuthenticated`).
+2. **`EnabledCompetitionCategoryViewSet`** (`events/views.py:27`) — abrir lectura pública
+   (`IsAuthenticatedOrReadOnly`) para poder mapear `enabled_competition_category` (id) de
+   los inscritos a la categoría de la competición.
+3. **`CompetitionCategoryViewSet`** (`events/views.py:21`) — abrir lectura pública
+   (`IsAuthenticatedOrReadOnly`) para resolver `competition_category` id → nombre.
 
-Ajustes menores de coherencia en `PROMPT.md`:
-- Bloque **"Rutas de la aplicación"** (`/admin`): añadir ` /admin/sedes → CRUD del
-  catálogo de sedes (solo superadmin)`.
-- Línea 15 (Alcance del frontend) y línea 49 (tabla "Lo que replicamos"): mencionar
-  sedes (y filiaciones) junto al catálogo de categorías.
-- Tabla "Catálogos" (línea 384) ya lista `Sedes/locations | GET` → verificar que
-  quede apuntando a la nueva sección II-D (opcional).
+> **Por qué el catálogo y no "anidar" el nombre (alternativa de `PROMPT.md` §4):**
+> `EnabledCompetitionCategorySerializer` hoy expone `competition_category: number`; el
+> admin lo consume como número (`CompetitionCategoriesPage.tsx:50,87,120` y payloads de
+> escritura). Convertir ese campo en objeto anidado **rompería** el admin → se descarta.
+> El join por nombre con el catálogo es aditivo y no rompe nada (ambos provienen del mismo
+> modelo `CompetitionCategory.name`).
 
-**Verificación**: `PROMPT.md` contiene la Parte II-D completa y coherente; nada más cambia.
+**Verificación**: anotar en `Process.md` el shape verificado y los 3 avisos; pedir al
+usuario que aplique los permisos (o confirmar que se implementa con degradación hasta que
+lo aplique). No ejecutar comandos del backend.
 
 ---
 
-### Paso 1 — Verificar el shape del backend (informativo, NO ejecutar backend)
-
-**Qué hacer**:
-1. Confirmar el serializer de `Location` en `leader\Scorely` (ya verificado:
-   `id, name, address, city, state, country, latitude, longitude`); obligatoriedad
-   de `address` y opcionalidad de `latitude`/`longitude`.
-2. Confirmar que `/api/v1/locations/{id}/` existe (GET individual) por el
-   `ModelViewSet` estándar.
-3. Confirmar el **DELETE en uso**: `Competition.location` es `PROTECT` →
-   `ProtectedError` 4xx → condiciona el manejo de errores en la UI (Paso 8).
-4. **AVISAR al usuario** (sin tocar backend) si la escritura no está restringida a
-   superadmin: conviene `IsSuperAdmin` en `LocationViewSet`.
-
-**Verificación**: anotar en `Process.md` el shape verificado. No ejecutar comandos del backend.
-
----
-
-### Paso 2 — Tipos DTOs
+### Paso 1 — Tipos DTOs
 
 **Archivo**: `src/types/index.ts`
 
-**Qué hacer** (replicar patrón `AffiliationWritePayload`, junto al tipo `Location` ya existente):
+**Qué hacer** (junto a `EnabledCompetitionCategory`, shape verificado en
+`CompetitorSerializer`):
 
 ```ts
-export interface LocationWritePayload {
-  id?: number;
-  name: string;
-  address?: string;
-  city: string;
-  state: string;
-  country: string;
-  latitude?: number;
-  longitude?: number;
+export type CompetitorType = "INDIVIDUAL" | "TEAM";
+
+export interface Competitor {
+  id: number;
+  competitor_type: CompetitorType;
+  athlete?: number | null;
+  team?: number | null;
+  registration_number: string;
+  competition: number;
+  enabled_competition_category: number;
 }
 ```
-
-- `address`: en el backend es obligatorio; en el payload puede ir `required` o
-  `optional` con aviso (decidir en el Paso 1; lo seguro: enviarlo siempre desde el form).
-- `latitude`/`longitude`: números opcionales (Decimal nullable). El form los manda
-  **solo si hay valor** (ver Paso 6).
-
-**Verificación**: `npm run typecheck` no rompe usos existentes (`Location` se usa en
-`getAdminCatalogs`, `Competition.location`, `LocationMap`).
-
----
-
-### Paso 3 — Funciones API admin
-
-**Archivo**: `src/api/admin.ts`
-
-**Qué hacer** (mismo patrón que filiaciones):
-
-```ts
-export async function fetchLocations(): Promise<Location[]> {
-  return fetchCatalog<Location>("/locations/?page_size=100");
-}
-
-export async function fetchLocation(id: number): Promise<Location> {
-  return request<Location>(`/locations/${id}/`);
-}
-
-export async function createLocation(
-  payload: LocationWritePayload,
-): Promise<Location> {
-  assertSuperUser();
-  return request<Location>("/locations/", { method: "POST", body: JSON.stringify(payload) });
-}
-
-export async function updateLocation(
-  payload: LocationWritePayload,
-): Promise<Location> {
-  assertSuperUser();
-  return request<Location>(`/locations/${payload.id}/`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-
-export async function deleteLocation(id: number): Promise<void> {
-  assertSuperUser();
-  await request<void>(`/locations/${id}/`, { method: "DELETE" });
-}
-```
-
-- **Refactor**: hacer que `getAdminCatalogs()` use `fetchLocations()` en lugar del
-  `fetchCatalog("/locations/")` inline (un solo origen del catálogo, igual que se
-  hizo con `fetchAffiliations()`). El select de `CompetitionFormPage` sigue sin cambios.
-- `assertSuperUser()` ya existe; las tres funciones de escritura lo usan.
-
-**Verificación**: `npm run typecheck`. Tests de API en el Paso 9.
-
----
-
-### Paso 4 — Hooks admin
-
-**Archivo**: `src/hooks/useAdminModules.ts`
-
-**Qué hacer** (replicar el bloque de filiaciones `useAdminModules.ts:162-200`,
-con `queryKey ["admin","locations"]`):
-
-- `useAdminLocations()` → `useQuery({ queryKey: ["admin","locations"], queryFn: fetchLocations, staleTime: 30_000 })`.
-- `useCreateLocation()` / `useUpdateLocation()` / `useDeleteLocation()` → mutations
-  que en `onSuccess` invalidan `["admin","locations"]`.
-- Añadir `fetchLocations` a los imports existentes del archivo.
 
 **Verificación**: `npm run typecheck`.
 
 ---
 
-### Paso 5 — Página `LocationsPage` (catálogo, solo superadmin)
+### Paso 2 — API pública
 
-**Archivo**: `src/pages/admin/LocationsPage.tsx` (**crear**)
+**Archivo**: `src/api/public.ts`
 
-**Qué hacer** (replicar `AffiliationsPage.tsx` adaptando campos):
-- `const isSuperUser = Boolean(useAuthStore((s) => s.user?.is_superuser));`
-  Si `!isSuperUser`: breadcrumb + aviso "Solo el superusuario puede administrar las sedes." (sin acciones).
-- Estados: `Spinner` ("Cargando sedes…"), `ErrorState`, `EmptyState` ("Sin sedes").
-- Tabla: columnas `Nombre`, `Dirección`, `Ciudad`, `Estado/Provincia`, `País`,
-  `Coordenadas` (lat, lng o `—`), `Acciones` (Editar / Eliminar).
-- Botón "Nueva sede" → `/admin/sedes/new`.
-- `handleDelete(id, name)`: `window.confirm` + `useDeleteLocation`; capturar
-  `ApiError` y mostrar mensaje claro si el backend rechaza por estar en uso
-  ("Esta sede está en uso por competiciones y no se puede eliminar.").
+**Qué hacer** (siguiendo el patrón de `getEnabledCompetitionCategories` con `auth: false`):
 
-**Verificación**: navegación manual con superadmin (ve todo) y con admin de competición (solo aviso).
+```ts
+export async function getCompetitors(competitionId: number | string): Promise<Competitor[]> {
+  // GET /competitors/?competition={id}&page_size=100 — recorrer `next` para no
+  // subcontar si hay más de 100 inscritos (PAGE_SIZE global = 20; pedimos 100).
+  // Retorna la lista completa de inscritos de la competición.
+}
 
----
-
-### Paso 6 — Form `LocationFormPage` (crear/editar)
-
-**Archivo**: `src/pages/admin/LocationFormPage.tsx` (**crear**)
-
-**Qué hacer** (replicar `AffiliationFormPage.tsx`):
-- Schema zod: `name` (`z.string().min(1)`), `address` (requerido si el backend lo
-  exige), `city`, `state`, `country` (`min(1)`); `latitude`/`longitude` opcionales numéricos:
-  ```ts
-  const optionalNumber = z.preprocess(
-    (v) => (v === "" || v === null || Number.isNaN(v) ? undefined : Number(v)),
-    z.number().optional(),
-  );
-  ```
-  (con `valueAsNumber: true`, el input vacío da `NaN` → se convierte a `undefined`).
-- Create/edit con `useCreateLocation` / `useUpdateLocation`; edición usa
-  `fetchLocation(Number(id))` en `useQuery` con `enabled: isEditing` + `reset` en `useEffect`.
-- Payload: `{ id?, name, address, city, state, country }` + `latitude`/`longitude`
-  **solo si están definidos** (no enviar `null`).
-- Control de acceso: `!isSuperUser` → aviso de sin acceso (patrón `AffiliationFormPage`).
-- Capturar `ApiError` en `submit` → mostrar en `role="alert"`.
-
-**Verificación**: crear y editar una sede como superadmin persiste (backend real);
-sin coords se guarda `null`.
-
----
-
-### Paso 7 — Routing + Sidebar + ícono
-
-**Archivo**: `src/App.tsx`
-
-**Qué hacer** (junto a las rutas de filiaciones):
-
-```tsx
-<Route path="/admin/sedes" element={<LocationsPage />} />
-<Route path="/admin/sedes/new" element={<LocationFormPage />} />
-<Route path="/admin/sedes/:id/edit" element={<LocationFormPage />} />
+export async function getCompetitionCategories(): Promise<CompetitionCategory[]> {
+  // GET /competition-categories/?page_size=100 — catálogo público con nombres.
+}
 ```
 
-**Archivo**: `src/components/admin/AdminSidebar.tsx`
+- **Paginación de `getCompetitors`:** llamar con `page_size=100`; si
+  `data.next` existe, encadenar los `next` y acumular `results`; detenerse al agotar.
+  Usar `unwrapList` para tiras de un solo bloque.
+- `CompetitionCategory` es el tipo existente (`{id, name, min_members, max_members}`).
 
-**Qué hacer**:
-- Añadir ítem **"Sedes"** (`path: "/admin/sedes"`) al bloque `menuItems`
-  **condicionado a `isSuperUser`** (mismo spread condicional que "Categorías"/"Filiaciones").
-- Ícono: nuevo `MapPinIcon` en `src/components/admin/icons.tsx` (patrón `StrokeIcon`).
-
-**Verificación**: superadmin ve "Sedes"; admin de competición no. Acceso directo a
-`/admin/sedes` como no-superadmin → aviso de sin acceso (Paso 5).
+**Verificación**: `npm run typecheck`. Tests de API en Paso 7.
 
 ---
 
-### Paso 8 — Bloqueo por rol + manejo de borrado en uso
+### Paso 3 — Hooks
 
-**Qué hacer**:
-- **Guard por rol**: cubierto por `assertSuperUser()` (Paso 3) + ocultamiento en UI
-  (Pasos 5–7). Verificar que no-superadmin **no** emite POST/PATCH/DELETE.
-- **Borrado en uso**: `Competition.location` = `PROTECT` → `ProtectedError` 4xx.
-  En `LocationsPage.handleDelete` capturar `ApiError` y mostrar el mensaje
-  ("Esta sede está en uso por competiciones y no se puede eliminar.") sin romper la lista.
-- **Registrar AVISO** en `Process.md`/`RESULTADOS.md`: backend no limita por rol la
-  escritura de `LocationViewSet`; para una regla de negocio real conviene `IsSuperAdmin` (decisión backend, no implementar).
+**Archivos**: `src/hooks/useCompetitors.ts` (**crear**), `src/hooks/useCompetitionCategories.ts` (**crear**)
 
-**Verificación**: como admin de competición no es posible crear/editar/eliminar
-desde la UI ni se emiten peticiones de escritura.
+**Qué hacer** (replicar el patrón de `useEnabledCompetitionCategories.ts`):
+
+- `useCompetitors(competitionId, enabled = true)` →
+  `useQuery({ queryKey: ["competitors", competitionId], queryFn: () => getCompetitors(...), enabled: enabled && competitionId válido })`.
+- `useCompetitionCategories(enabled = true)` →
+  `useQuery({ queryKey: ["competition-categories"], queryFn: getCompetitionCategories, enabled })`.
+  El catálogo es global (no depende de la competición) y cacheable.
+
+**Verificación**: `npm run typecheck`.
 
 ---
 
-### Paso 9 — Pruebas
+### Paso 4 — Util puro de mapeo y conteo
 
-**Archivos**: `tests/fixtures.ts`, `tests/adminApi.test.ts`, `tests/LocationsPage.test.tsx`,
-(opcional) `tests/LocationFormPage.test.tsx`
+**Archivo**: `src/utils/categoryCounts.ts` (**crear**)
+
+**Qué hacer**: función pura, sin hooks, fácil de testear:
+
+```ts
+export interface CategoryCount {
+  code: string;
+  name: string;
+  count: number;
+}
+
+export function buildCategoryCounts(args: {
+  categories: CategoryRef[];                   // del leaderboard (orden = mostrar)
+  enabled: EnabledCompetitionCategory[];       // por competición: {id, competition_category, ...}
+  catalog: CompetitionCategory[];              // id → name
+  competitors: Competitor[];                   // inscritos de la competición
+}): CategoryCount[]
+```
+
+Lógica:
+1. `counts = Map<enabledId, number>` sumando 1 por cada `competitor.enabled_competition_category`.
+2. `nameById = Map<catalog.id → catalog.name>`.
+3. `enabledIdByName = Map<name → enabledId>` usando
+   `nameById.get(enabled.competition_category)` (solo de la competición).
+4. Devuelve, en el **orden de `categories`**, `{ code, name, count: counts.get(enabledIdByName.get(name)) ?? 0 }`.
+
+Caso defensivo: si un nombre del leaderboard no matchea el catálogo (no debería pasar,
+mismo origen `CompetitionCategory.name`) → `count = 0`.
+
+**Verificación**: unit en Paso 7.
+
+---
+
+### Paso 5 — Componente de sección
+
+**Archivo**: `src/components/public/CategoryInscritos.tsx` (**crear**)
+
+**Qué hacer** (estilo Tailwind claro, patrón del resto de la página):
+
+- Props: `competitionId: number`, `categories: CategoryRef[]` (las del leaderboard).
+- Usa `useEnabledCompetitionCategories(competitionId, enabled)`,
+  `useCompetitionCategories(enabled)` y `useCompetitors(competitionId, enabled)`.
+- Render:
+  - `h2` **"Categorías e inscritos"** (igual estilo que "Workouts").
+  - Tarjetas/badges: cada categoría con su recuento, p. ej. `RX Individual — 12` (o badge
+    con el número). Mismo orden que `LeaderboardFilters`.
+  - Carga: `Spinner label="Cargando inscritos…"`.
+  - Error o no disponibles (401/403/vacío): **ocultar la sección** (o `EmptyState`
+    discreto) sin romper la página.
+  - Categoría sin inscritos → `0`.
+- Un `useMemo` con `buildCategoryCounts` sobre los datos de los 3 hooks.
+
+**Verificación**: componente en aislamiento (mock de hooks) en Paso 7.
+
+---
+
+### Paso 6 — Integración en `CompetitionDetail`
+
+**Archivo**: `src/pages/public/CompetitionDetail.tsx`
 
 **Qué hacer**:
-- **Fixtures**: `makeLocation(overrides)` (replicar `makeAffiliation`) →
-  `{ id: 1, name: "Paraná Raquet", address: "Av. Alem 123", city: "Paraná", state: "Entre Ríos", country: "Argentina", latitude: "-31.7333", longitude: "-60.5297" }`.
-- **`adminApi.test.ts`** (replicar el bloque "affiliations catalog"):
-  - Bloquea escrituras cuando `is_superuser: false` (`rejects.toThrow("No tenés permisos")`, `request` no llamado).
-  - POST/PATCH/DELETE correctos con `is_superuser: true` (URLs y métodos: `/locations/`,
-    `/locations/{id}/`).
-  - `fetchLocations` (URL `/locations/?page_size=100`) y `fetchLocation(id)`.
-- **`LocationsPage.test.tsx`** (replicar `AffiliationsPage.test.tsx`):
-  - Superadmin: tabla con nombre/ciudad/país/coords + botón "Nueva sede".
-  - No-superadmin: aviso, sin acciones.
-  - Estados carga/vacío.
-  - Borrado rechazado por backend → mensaje de error visible (stub de `confirm` + `onError`).
-- **`LocationFormPage.test.tsx`** (opcional): validación de campos obligatorios,
-  submit create/edit con/without coords.
+- Importar y renderizar `<CategoryInscritos />` **antes de la sección "Workouts"** (entre
+  el grid de líneas 130-168 y la sección de líneas 170-204).
+- Pasar `competitionId={id}` y `categories={categories}` (ya derivadas en 48-51, del
+  leaderboard).
+- Solo renderizar si `id` existe y `categories.length > 0` (si la competición no tiene
+  leaderboard/categorías, no mostrar la sección).
+- No tocar el resto del flujo (Workouts/Leaderboard intactos).
+
+**Verificación**: `npm run typecheck`; navegación manual (Paso 8) y tests (Paso 7).
+
+---
+
+### Paso 7 — Pruebas
+
+**Archivos**: `tests/fixtures.ts`, `tests/publicApi.test.ts`, `tests/categoryCounts.test.ts` (nuevo),
+`tests/CategoryInscritos.test.tsx` (nuevo), `tests/CompetitionDetail.test.tsx`
+
+**Qué hacer**:
+
+- **Fixtures**: `makeCompetitor(overrides)` →
+  `{ id: 1, competitor_type: "INDIVIDUAL", athlete: 10, team: null, registration_number: "001", competition: 1, enabled_competition_category: 3 }`.
+  Reutilizar `makeCompetitionCategory` y `makeEnabledCompetitionCategory` si hiciera falta.
+- **`publicApi.test.ts`**: bloques `getCompetitors` y `getCompetitionCategories`:
+  - URLs y `auth: false` → `/competitors/?competition=8&page_size=100` y
+    `/competition-categories/?page_size=100`.
+  - Paginación: respuesta con `next` → la función acumula y devuelve todos los inscritos.
+  - Catálogo: unwrap de `{results: [...]}` → `CompetitionCategory[]`.
+- **`categoryCounts.test.ts`** (unit del util): join por nombre correcto; `0` cuando la
+  categoría no matchea; orden preservado (el de `categories`); múltiples inscritos por
+  categoría.
+- **`CategoryInscritos.test.tsx`**: mockear los 3 hooks (patrón de `AffiliationsPage.test.tsx`
+  con `queryResult`):
+  - Carga: `Spinner`.
+  - Con datos: `RX Individual — 12` y `Scaled — 5` en orden.
+  - Error (simular rechazo/`isError`): sección oculta o estado vacío.
+  - Vacío (sin categorías): no renderiza el `h2`.
+- **`CompetitionDetail.test.tsx`**: añadir mocks de los 3 hooks nuevos al `vi.mock` actual
+  (default: sin datos → sección oculta) para **no romper los 13 tests existentes**; agregar
+  1 caso: "muestra las categorías con recuento antes de Workouts" (orden de headings:
+  "Categorías e inscritos" aparece antes que "Workouts" en el DOM).
 
 **Verificación**: `npm run test` en verde.
 
 ---
 
-### Paso 10 — Verificación final y cierre de la Parte II-D
+### Paso 8 — Verificación final y cierre de la Parte II-E
 
 Ejecutar en orden:
 
 1. `npm run lint` → sin errores (1 warning preexistente `SidebarContext.tsx` OK).
 2. `npm run typecheck` → sin errores.
-3. `npm run test` → todos en verde (actualmente 70/70 en 11 archivos; suma los nuevos).
+3. `npm run test` → todos en verde (80/80 actual; suma los nuevos).
 4. `npm run build` → OK (dist generado).
-5. Actualizar `Process.md` (nuevo Paso 26) y `RESULTADOS.md` (nueva iteración)
-   + avisos al usuario de backend; actualizar la cabecera de estado de este `PLAN.md`.
+5. Actualizar `Process.md` (nuevo Paso) y `RESULTADOS.md` (nueva iteración) + avisos backend;
+   actualizar la cabecera de estado de este `PLAN.md`.
 
-**Escenarios manuales** (con backend real disponible):
+**Escenarios manuales** (cuando el backend esté abierto):
 
 | Escenario | Esperado |
 |-----------|----------|
-| Superadmin → `/admin/sedes` | CRUD completo (crear/editar/eliminar) |
-| Superadmin crea sede con coords | Aparece en el listado y en el select de competiciones; mapa público usa las coords |
-| Admin de competición → `/admin/sedes` | Sin acceso (oculto en menú, aviso en pantalla) |
-| No-superadmin intenta POST/PATCH/DELETE | El frontend no emite la petición (guard por rol) |
-| Editar competición y elegir nueva sede | El select de `CompetitionFormPage` muestra las sedes existentes (incl. creadas) |
-| Eliminar sede con competiciones asociadas | Mensaje de error claro si el backend rechaza (`ProtectedError` 4xx) |
+| Público abre `/competitions/:slug/` sin login | Ve la sección "Categorías e inscritos" **antes de Workouts** con el recuento real por categoría |
+| Competición con 0 inscritos en una categoría | Muestra `0` en esa categoría (la categoría aparece por el leaderboard) |
+| Competición sin categorías/leaderboard | No se muestra la sección; la página no se rompe |
+| Backend aún JWT (401/403) | La sección se oculta/degrada, el resto del detalle funciona igual |
+| Competición grande (más de 100 inscritos) | El recuento es exacto (se recorre la paginación) |
+| Orden de categorías | El mismo que el filtro de categorías del leaderboard |
 
 ---
 
-## 5. Endpoints de la Parte II-D (resumen)
+## 5. Endpoints de la Parte II-E (resumen)
 
 | Acción | Método | URL | Auth | Rol frontend |
 |--------|--------|-----|------|-------------|
-| Listar sedes | GET | `/api/v1/locations/?page_size=100` | JWT | superadmin + admin (select) |
-| Obtener sede | GET | `/api/v1/locations/{id}/` | JWT | superadmin (edición) |
-| Crear sede | POST | `/api/v1/locations/` | JWT | **solo superadmin** (`assertSuperUser`) |
-| Editar sede | PATCH | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
-| Eliminar sede | DELETE | `/api/v1/locations/{id}/` | JWT | **solo superadmin** |
+| Leaderboard unificado (categorías listadas) | GET | `/api/v1/leaderboards/competition/{id}/final/` | **Pública** (ya) | público |
+| Habilitaciones de la competición (mapeo id) | GET | `/api/v1/enabled-competition-categories/?competition={id}` | pública **pendiente** (hoy JWT) | público |
+| Catálogo de categorías (id → nombre) | GET | `/api/v1/competition-categories/` | pública **pendiente** (hoy JWT) | público |
+| Inscritos de la competición (recuento) | GET | `/api/v1/competitors/?competition={id}` | pública **pendiente** (hoy JWT) | público |
 
-> El GET del catálogo ya lo consume `getAdminCatalogs` (select "Sede" de
-> `CompetitionFormPage`). No se puede borrar una sede usada por competiciones
-> (`Competition.location` = `PROTECT` → `ProtectedError` 4xx) → manejar en la UI (Paso 8).
+> El leaderboard `/final/` ya es público y es el que provee la lista y el orden de
+> categorías (cada categoría, incluso sin resultados, aparece). Los otros 3 endpoints
+> exigen JWT hoy → **avisos al usuario (Paso 0 / §8)** para abrir su lectura pública.
 
 ---
 
-## 6. Orden de ejecución recomendado (Parte II-D)
+## 6. Orden de ejecución recomendado (Parte II-E)
 
-1. **Paso 0** (documentar Parte II-D en `PROMPT.md`) → desbloquea el resto.
-2. **Paso 1** (verificar backend, informativo) → decisiones de shape y borrado.
-3. **Paso 2** (tipos) → base para todo lo demás.
-4. **Paso 3 + 4** (API + hooks), dependen de Paso 2; independientes entre sí.
-5. **Paso 5 + 6** (listado + form del catálogo).
-6. **Paso 7** (rutas + sidebar + ícono) y **Paso 8** (guard + borrado en uso).
-7. **Paso 9** (tests) — cubre API y páginas.
-8. **Paso 10** (verificación final + documentación).
+1. **Paso 0** (avisos backend + shape) → desbloquea la decisión de mapeo (catálogo) y la
+   degradación mientras el backend no esté abierto.
+2. **Paso 1** (tipos `Competitor`) → base para API.
+3. **Paso 2 + 3** (API pública + hooks); dependen de Paso 1; independientes entre sí.
+4. **Paso 4** (util de conteo, puro) → independiente, testear desde ya.
+5. **Paso 5 + 6** (componente + integración en `CompetitionDetail` antes de Workouts).
+6. **Paso 7** (pruebas) — cubre API, util, componente y página.
+7. **Paso 8** (verificación final + documentación).
 
 ---
 
 ## 7. Restricciones que se mantienen (de `PROMPT.md` Parte III)
 
-- **NO** tocar el backend (ni permisos ni endpoints) en esta iteración; el refuerzo
-  por rol queda **avisado** al usuario.
+- **NO** tocar el backend (ni permisos ni endpoints); la apertura de lectura queda
+  **avisada** al usuario.
 - **NO** tocar `free-react-tailwind-admin-dashboard/` (solo lectura).
 - **NO** crear ramas, no push, no commit sin pedido explícito.
-- **NO** mockear datos en producción.
+- **NO** mockear datos en producción; sin backend abierto la sección degrada (ocultar),
+  no inventar recuentos.
 - No añadir comentarios al código salvo que se soliciten.
 - Documentar avances en `Process.md` al iniciar y finalizar cada paso.
-- Mantener el estilo TailAdmin (tema claro), tablas/formularios iguales a
-  `AffiliationsPage`/`AffiliationFormPage`.
+- Mantener el estilo TailAdmin (tema claro) y los patrones del detalle público actual.
 - No tomar tecnologías nuevas sin preguntar (regla de la Parte I).
 
 ---
 
 ## 8. Avisos al usuario (backend — no se toca en frontend)
 
-1. **Restricción de roles solo en frontend:** el backend expone `locations/` con
-   permiso global `IsAuthenticated`; cualquier usuario autenticado podría escribir.
-   Para una regla de negocio real conviene `IsSuperAdmin` en la escritura de
-   `LocationViewSet`. **(Decisión backend, no implementar aquí.)**
-2. **Shape del serializer `Location` ya verificado:** 8 campos
-   (`id, name, address, city, state, country, latitude, longitude`); `name`,
-   `address`, `city`, `state`, `country` obligatorios; `latitude`/`longitude`
-   opcionales (llegan como string o `null` en las vistas).
-3. **Borrado en uso:** `Competition.location` usa `on_delete=PROTECT` → el DELETE de
-   una sede referenciada falla (4xx); el frontend muestra un mensaje claro, pero el
-   comportamiento definitivo depende del backend.
-4. **Dato demo:** `seed_data.py` crea sedes españolas como texto plano; no hay
-   catálogo geo de ciudades/estados/países (si más adelante se quiere "control" de
-   esos valores, evaluar un maestro en backend — **fuera del alcance de este plan**).
+1. **Abrir lectura pública de `CompetitorViewSet`** (`participants/views.py:50`): hoy usa
+   el global `IsAuthenticated`; aplicar `IsAuthenticatedOrReadOnly` (sin filtrar por
+   usuario). Es la fuente del recuento de inscritos (decisión del usuario). Sin esto, la
+   sección se oculta (degradación).
+2. **Abrir lectura pública de `EnabledCompetitionCategoryViewSet`**
+   (`events/views.py:27`) y **`CompetitionCategoryViewSet`** (`events/views.py:21`) para el
+   mapeo `enabled_competition_category` (id) → nombre de categoría.
+3. **No usar "anidar" el nombre** en `EnabledCompetitionCategorySerializer` (alternativa
+   descartada): hoy `competition_category: number` lo consume el admin
+   (`CompetitionCategoriesPage.tsx`) y los payloads de escritura como número; nestearlo
+   rompería el admin.
+4. **Recuento = inscripciones (`Competitor`), no resultados**: puede ser mayor que las
+   entradas con puntos del leaderboard mientras haya inscritos sin resultados.
+5. **Paginación**: `PAGE_SIZE` global = 20; `getCompetitors` pide `page_size=100` y
+   recorre `next` para no subcontar en competiciones grandes (ej. HYROX).
+6. **Seed demo**: `seed_data.py` crea categorías/sedes de demo; el recuento mostrará lo
+   que efectivamente haya registrado (posible `0` en seeds sin `Competitor`).

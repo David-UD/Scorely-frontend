@@ -5,6 +5,8 @@ import {
   getLeaderboard,
   getEvents,
   getEnabledCompetitionCategories,
+  getCompetitionCategories,
+  getCompetitors,
 } from "@/api/public";
 import { request, ApiError } from "@/api/client";
 
@@ -148,6 +150,98 @@ describe("getEnabledCompetitionCategories", () => {
         competition_category: { id: 1, code: "rx", name: "RX" },
       },
     ]);
+  });
+});
+
+describe("getCompetitionCategories", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("requests the public catalog without auth and unwraps the page", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [{ id: 1, name: "RX", min_members: 1, max_members: 1 }],
+    });
+
+    const result = await getCompetitionCategories();
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competition-categories/?page_size=100",
+      { auth: false },
+    );
+    expect(result).toEqual([{ id: 1, name: "RX", min_members: 1, max_members: 1 }]);
+  });
+});
+
+describe("getCompetitors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("requests competitors of a competition without auth", async () => {
+    mockedRequest.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        {
+          id: 5,
+          competitor_type: "INDIVIDUAL",
+          athlete: 10,
+          team: null,
+          registration_number: "001",
+          competition: 8,
+          enabled_competition_category: 3,
+        },
+      ],
+    });
+
+    const result = await getCompetitors(8);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitors/?competition=8&page_size=100",
+      { auth: false },
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].enabled_competition_category).toBe(3);
+  });
+
+  it("walks the pagination while next is present", async () => {
+    mockedRequest
+      .mockResolvedValueOnce({
+        count: 2,
+        next: "http://localhost:8000/api/v1/competitors/?page=2&page_size=100",
+        previous: null,
+        results: [
+          {
+            id: 1,
+            competitor_type: "INDIVIDUAL",
+            athlete: 10,
+            team: null,
+            registration_number: "001",
+            competition: 8,
+            enabled_competition_category: 3,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        count: 2,
+        next: null,
+        previous: null,
+        results: [
+          {
+            id: 2,
+            competitor_type: "TEAM",
+            athlete: null,
+            team: 4,
+            registration_number: "002",
+            competition: 8,
+            enabled_competition_category: 4,
+          },
+        ],
+      });
+
+    const result = await getCompetitors(8);
+    expect(mockedRequest).toHaveBeenNthCalledWith(2, "/competitors/?competition=8&page_size=100&page=2", { auth: false });
+    expect(result).toHaveLength(2);
   });
 });
 
