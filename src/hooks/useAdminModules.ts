@@ -3,6 +3,7 @@ import {
   createAffiliation,
   createAthlete,
   createCompetitionCategory,
+  createCompetitor,
   createEnabledCompetitionCategory,
   createEvent,
   createLocation,
@@ -10,6 +11,7 @@ import {
   deleteAffiliation,
   deleteAthlete,
   deleteCompetitionCategory,
+  deleteCompetitor,
   deleteEnabledCompetitionCategory,
   deleteEvent,
   deleteLocation,
@@ -17,6 +19,7 @@ import {
   fetchAffiliations,
   fetchAthletes,
   fetchCompetitionCategories,
+  fetchCompetitors,
   fetchEnabledCompetitionCategories,
   fetchEvents,
   fetchLocations,
@@ -24,6 +27,7 @@ import {
   updateAffiliation,
   updateAthlete,
   updateCompetitionCategory,
+  updateCompetitor,
   updateEnabledCompetitionCategory,
   updateEvent,
   updateLocation,
@@ -32,6 +36,7 @@ import {
 import type {
   AffiliationWritePayload,
   CompetitionCategoryWritePayload,
+  CompetitorWritePayload,
   EnabledCompetitionCategoryWritePayload,
   LocationWritePayload,
 } from "@/types";
@@ -119,46 +124,45 @@ export function useDeleteAthlete() {
   });
 }
 
-export function useAdminTeams(competitionId: number | null) {
+export function useAdminTeams() {
   return useQuery({
-    queryKey: ["admin", "teams", competitionId],
-    queryFn: () => fetchTeams(competitionId as number),
-    enabled: Boolean(competitionId),
+    queryKey: ["admin", "teams"],
+    queryFn: fetchTeams,
     staleTime: 30_000,
   });
 }
 
-export function useCreateTeam(competitionId: number | null) {
+export function useCreateTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createTeam,
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["admin", "teams", competitionId],
+        queryKey: ["admin", "teams"],
       });
     },
   });
 }
 
-export function useUpdateTeam(competitionId: number | null) {
+export function useUpdateTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: updateTeam,
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["admin", "teams", competitionId],
+        queryKey: ["admin", "teams"],
       });
     },
   });
 }
 
-export function useDeleteTeam(competitionId: number | null) {
+export function useDeleteTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteTeam,
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["admin", "teams", competitionId],
+        queryKey: ["admin", "teams"],
       });
     },
   });
@@ -334,6 +338,53 @@ export function useDeleteEnabledCategory(competitionId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["admin", "enabled-competition-categories", competitionId],
+      });
+    },
+  });
+}
+
+// ── Competitors (admin scope) ────────────────────────────────────────────────
+
+export function useAdminCompetitors(competitionId: number | null) {
+  return useQuery({
+    queryKey: ["admin", "competitors", competitionId],
+    queryFn: () => fetchCompetitors(competitionId as number),
+    enabled: Boolean(competitionId),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateCompetitor(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CompetitorWritePayload) => createCompetitor(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "competitors", competitionId],
+      });
+    },
+  });
+}
+
+export function useUpdateCompetitor(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CompetitorWritePayload) => updateCompetitor(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "competitors", competitionId],
+      });
+    },
+  });
+}
+
+export function useDeleteCompetitor(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCompetitor,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "competitors", competitionId],
       });
     },
   });

@@ -418,6 +418,91 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 
 ---
 
+## Iteración 2026-09-21 — Módulo admin "Competidores" (Parte II-F)
+
+> Ejecución del plan `PLAN.md` (Pasos 0–8). CRUD de **inscripciones (`Competitor`)** en `/admin/competitors` (+ `/new` y `/:id/edit`), por competición en scope, para **admins de competición y superuser** (sin gate superadmin). Sin tocar el backend.
+
+### Decisiones del usuario
+1. **Alcance**: listado + **alta/edición/baja** completo (CRUD).
+2. **Tipos**: Individual y por equipos (toggle en el formulario; `competitor_type` `INDIVIDUAL`/`TEAM`).
+3. **`registration_number` obligatorio** en la UI (el modelo lo tiene `blank=True`, sin unicidad).
+4. Etiqueta del ítem en el panel: **"Competidores"**, ruta `/admin/competitors`. Sin gate superadmin.
+
+### Cambios aplicados
+- `PROMPT.md`: nueva sección **Parte II-F** (título, objetivo, alcance, endpoints con shape verificado, DTOs, componentes, pruebas, observaciones y avisos backend).
+- `src/types/index.ts`: nuevo `CompetitorWritePayload` (`athlete`/`team` **siempre presentes**, el no usado en `null` — invariante del `clean()` del backend).
+- `src/api/admin.ts`: `fetchCompetitors(competitionId)`, `fetchCompetitor(id)`, `createCompetitor`, `updateCompetitor`, `deleteCompetitor` (JWT, sin `{auth:false}`).
+- `src/hooks/useAdminModules.ts`: `useAdminCompetitors`, `useCreateCompetitor`, `useUpdateCompetitor`, `useDeleteCompetitor` (invalidan `["admin","competitors", …]`).
+- `src/pages/admin/CompetitorsPage.tsx` (nuevo): `CompetitionScopeSelect` + tabla Nº de inscripción / Competidor (nombre de atleta o equipo, resuelto con `useAdminAthletes`/`useAdminTeams`) / Tipo (`Individual`/`Equipo`) / Categoría (nombre del catálogo vía habilitaciones) / Acciones; orden por nº asc; confirm + banner de `ApiError` al eliminar; "Nuevo competidor" deshabilitado sin scope; Spinner/ErrorState/EmptyState.
+- `src/pages/admin/CompetitorFormPage.tsx` (nuevo): react-hook-form + zod (`superRefine` para atleta/equipo según tipo dinámico con `watch`); nº obligatorio; categorías habilitadas de la competición mostradas por nombre del catálogo; aviso si no hay categorías habilitadas; en edición la categoría/equipos se cargan de la **competición del registro** y el PATCH la conserva; payload con FK no usado en `null`; captura de `ApiError`.
+- `src/App.tsx`: rutas `/admin/competitors[/new/:id/edit]`. `src/components/admin/icons.tsx`: `UserPlusIcon`. `AdminSidebar.tsx`: ítem "Competidores" en Gestión.
+- Tests: `tests/fixtures.ts` (`makeAthlete`, `makeTeam`); `tests/adminApi.test.ts` (bloque "competitors": LIST/POST/PATCH/DELETE); `tests/CompetitorsPage.test.tsx` (nuevo); `tests/CompetitorFormPage.test.tsx` (nuevo).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run typecheck` | OK |
+| `npm run test` | **108/108** en verde (16 archivos) — +15 tests (4 API + 5 listado + 6 formulario) |
+| `npm run build` | OK (Vite 6.4.3) |
+
+### Notas / avisos backend (no se toca)
+- **Escrituras sin guard de competición/rol**: `CompetitorViewSet` (`apps/participants/views.py:50`) usa `IsAuthenticatedOrReadOnly` → cualquier usuario autenticado puede crear/editar/borrar inscripciones de cualquier competición. La restricción visual queda a nivel frontend (scope); para seguridad real replicar `TeamViewSet` (`IsCompetitionAdmin` + `visible_competitions_q` + guard en `create()`, `views.py:24-41`).
+- **`registration_number` sin unicidad** (`blank=True`, sin constraint): la UI lo exige pero no garantiza unicidad por competición.
+- **Borrado en uso**: `Competitor.enabled_competition_category` usa `on_delete=PROTECT` y el `Competitor` es FK de resultados → `DELETE` puede fallar; la UI muestra el banner.
+- **Relación con la Parte II-E**: cada inscripción alta aquí incrementa el recuento público "Categorías e inscritos".
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
+## Iteración 2026-09-22 — Módulo admin "Equipos globales" (Parte II-G)
+
+Los **equipos dejan de pertenecer a una competición** y pasan a un **catálogo
+global como `Athlete`** (espejo de Atletas/Atleta). El scope de competición se
+elimina **solo** del bloque de equipos; las categorías habilitadas y las
+inscripciones de competidores siguen por competición.
+
+### Cambios
+- `src/types/index.ts`: `Team`/`TeamWritePayload` **sin `competition`** (solo
+  `id`/`name`/`affiliation?`).
+- `src/api/admin.ts`: `fetchTeams()` **global** (`/teams/?page_size=100` sin
+  `competitionId`); `createTeam`/`updateTeam`/`deleteTeam` sin `competition`.
+- `src/hooks/useAdminModules.ts`: `useAdminTeams()` **global** (queryKey
+  `["admin","teams"]` sin scope); `useCreateTeam`/`useUpdateTeam`/`useDeleteTeam`
+  invalidan `["admin","teams"]`.
+- `src/pages/admin/TeamsPage.tsx`: **espejo de `AthletesPage`** — listado global
+  ordenado por nombre, sin `CompetitionScopeSelect`, sin columna "Competición",
+  botón "Nuevo equipo" siempre habilitado, `EmptyState` "Sin equipos".
+- `src/pages/admin/TeamFormPage.tsx`: **espejo de `AthleteFormPage`** — alta/edición
+  global (nombre + afiliación opcional), sin scope, breadcrumb "Equipos",
+  botones Guardar/Cancelar.
+- `src/pages/admin/CompetitorsPage.tsx` y `CompetitorFormPage.tsx`: el select de
+  Equipo tira **todos** los equipos globales (`useAdminTeams()` global); las
+  categorías habilitadas/inscripciones siguen por competición
+  (`useAdminEnabledCategories(competitionId)`).
+- Tests: `tests/fixtures.ts` `makeTeam`/`makeTeamWritePayload` **sin `competition`**;
+  bloque "teams" en `tests/adminApi.test.ts` global (LIST/POST/PATCH/DELETE).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente) |
+| `npm run test` | **112/112** en verde |
+| `npm run build` | OK |
+
+### Avisos backend / riesgos (espejo Parte II-F)
+- **`CompetitorViewSet` sin guard de competición/rol** (`apps/participants/views.py`)
+  sigue `IsAuthenticatedOrReadOnly` → cualquier usuario autenticado puede escribir
+  sobre cualquier competición; la restricción queda a nivel frontend. *(Nota
+  Parte II-G: el patrón `TeamViewSet` con `IsCompetitionAdmin` dejó de existir;
+  los equipos son ahora catálogo global.)*
+- **Escrituras sin unicidad/constraint** en `registration_number`; la UI lo exige
+  pero no lo garantiza por competición.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -436,6 +521,7 @@ Usar **Google Maps** en la vista pública. Variante elegida: **legacy embed sin 
 - [x] (2026-09-21) módulo admin de filiaciones: CRUD del catálogo en `/admin/affiliations` solo superadmin (Parte II-C)
 - [x] (2026-09-21) módulo admin de sedes: CRUD del catálogo en `/admin/sedes` solo superadmin (Parte II-D)
 - [x] (2026-09-21) vista pública: categorías habilitadas con recuento de inscritos antes de Workouts, con degradación elegante si el backend aún no expone los endpoints en lectura pública (Parte II-E)
+- [x] (2026-09-21) módulo admin de competidores: CRUD de inscripciones en `/admin/competitors` por scope (Individual/Equipo, nº obligatorio), para admins de competición y superuser (Parte II-F)
 
 ## No se tocó
 

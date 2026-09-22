@@ -22,6 +22,8 @@ import AthletesPage from "@/pages/admin/AthletesPage";
 import AthleteFormPage from "@/pages/admin/AthleteFormPage";
 import TeamsPage from "@/pages/admin/TeamsPage";
 import TeamFormPage from "@/pages/admin/TeamFormPage";
+import CompetitorsPage from "@/pages/admin/CompetitorsPage";
+import CompetitorFormPage from "@/pages/admin/CompetitorFormPage";
 import NotFound from "@/pages/NotFound";
 
 export default function App() {
@@ -66,6 +68,9 @@ export default function App() {
           <Route path="/admin/teams" element={<TeamsPage />} />
           <Route path="/admin/teams/new" element={<TeamFormPage />} />
           <Route path="/admin/teams/:id/edit" element={<TeamFormPage />} />
+          <Route path="/admin/competitors" element={<CompetitorsPage />} />
+          <Route path="/admin/competitors/new" element={<CompetitorFormPage />} />
+          <Route path="/admin/competitors/:id/edit" element={<CompetitorFormPage />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
         </Route>
 

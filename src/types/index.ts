@@ -166,14 +166,12 @@ export interface AthleteWritePayload {
 export interface Team {
   id: number;
   name: string;
-  competition: number;
   affiliation?: number | null;
 }
 
 export interface TeamWritePayload {
   id?: number;
   name: string;
-  competition: number;
 }
 
 export type CompetitorType = "INDIVIDUAL" | "TEAM";
@@ -183,6 +181,16 @@ export interface Competitor {
   competitor_type: CompetitorType;
   athlete?: number | null;
   team?: number | null;
+  registration_number: string;
+  competition: number;
+  enabled_competition_category: number;
+}
+
+export interface CompetitorWritePayload {
+  id?: number;
+  competitor_type: CompetitorType;
+  athlete: number | null;
+  team: number | null;
   registration_number: string;
   competition: number;
   enabled_competition_category: number;

@@ -68,6 +68,16 @@ export function ListIcon({ className }: IconProps) {
   );
 }
 
+export function UserPlusIcon({ className }: IconProps) {
+  return (
+    <StrokeIcon className={className}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M19 8v6M16 11h6" />
+    </StrokeIcon>
+  );
+}
+
 export function UsersIcon({ className }: IconProps) {
   return (
     <StrokeIcon className={className}>

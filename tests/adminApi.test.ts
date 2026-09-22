@@ -2,20 +2,28 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   createAffiliation,
   createCompetitionCategory,
+  createCompetitor,
   createLocation,
+  createTeam,
   deleteAffiliation,
   deleteCompetitionCategory,
+  deleteCompetitor,
   deleteLocation,
+  deleteTeam,
   updateAffiliation,
   updateCompetitionCategory,
+  updateCompetitor,
   updateLocation,
   createEnabledCompetitionCategory,
   updateEnabledCompetitionCategory,
   deleteEnabledCompetitionCategory,
   fetchEnabledCompetitionCategories,
   fetchAffiliations,
+  fetchCompetitors,
   fetchLocations,
+  fetchTeams,
   fetchAdminCompetitions,
+  updateTeam,
 } from "@/api/admin";
 import { request } from "@/api/client";
 import { useAuthStore } from "@/store/authStore";
@@ -340,6 +348,135 @@ describe("enabled competition categories", () => {
     await deleteEnabledCompetitionCategory(2);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/enabled-competition-categories/2/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("competitors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches competitors for a competition as a paginated scope", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        {
+          id: 1,
+          competitor_type: "INDIVIDUAL",
+          athlete: 10,
+          team: null,
+          registration_number: "001",
+          competition: 1,
+          enabled_competition_category: 1,
+        },
+      ],
+    });
+    const result = await fetchCompetitors(1);
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitors/?competition=1&page_size=100",
+    );
+  });
+
+  it("POSTs a competitor, sending the unused foreign key as null", async () => {
+    mockedRequest.mockResolvedValue({ id: 2 });
+    await createCompetitor({
+      competitor_type: "TEAM",
+      athlete: null,
+      team: 20,
+      registration_number: "010",
+      competition: 1,
+      enabled_competition_category: 1,
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitors/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      competitor_type: "TEAM",
+      athlete: null,
+      team: 20,
+      registration_number: "010",
+      competition: 1,
+      enabled_competition_category: 1,
+    });
+  });
+
+  it("PATCHes a competitor", async () => {
+    mockedRequest.mockResolvedValue({ id: 2 });
+    await updateCompetitor({
+      id: 2,
+      competitor_type: "INDIVIDUAL",
+      athlete: 11,
+      team: null,
+      registration_number: "010",
+      competition: 1,
+      enabled_competition_category: 1,
+    });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitors/2/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("DELETEs a competitor", async () => {
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteCompetitor(2);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/competitors/2/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("teams catalog", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches the teams catalog globally", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [{ id: 20, name: "Team El Pilar" }],
+    });
+    const result = await fetchTeams();
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith("/teams/?page_size=100");
+  });
+
+  it("POSTs a new team globally", async () => {
+    mockedRequest.mockResolvedValue({ id: 9, name: "Team El Pilar" });
+    await createTeam({ name: "Team El Pilar" });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/teams/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      name: "Team El Pilar",
+    });
+  });
+
+  it("PATCHes a team globally", async () => {
+    mockedRequest.mockResolvedValue({ id: 9, name: "Team El Pilar" });
+    await updateTeam({ id: 9, name: "Team El Pilar" });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/teams/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      id: 9,
+      name: "Team El Pilar",
+    });
+  });
+
+  it("DELETEs a team globally", async () => {
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteTeam(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/teams/9/",
       expect.objectContaining({ method: "DELETE" }),
     );
   });

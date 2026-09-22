@@ -1,12 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
 import {
   useAdminTeams,
   useDeleteTeam,
 } from "@/hooks/useAdminModules";
-import { useAdminScopeStore } from "@/store/adminScopeStore";
-import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -14,19 +11,9 @@ import EmptyState from "@/components/common/EmptyState";
 
 export default function TeamsPage() {
   const navigate = useNavigate();
-  const competitionId = useAdminScopeStore((s) => s.competitionId);
-  const teamsQuery = useAdminTeams(competitionId);
-  const deleteMutation = useDeleteTeam(competitionId);
-  const competitionsQuery = useAdminCompetitions();
+  const teamsQuery = useAdminTeams();
+  const deleteMutation = useDeleteTeam();
   const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  const competitionNames = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const c of competitionsQuery.data ?? []) {
-      map.set(c.id, c.name);
-    }
-    return map;
-  }, [competitionsQuery.data]);
 
   if (teamsQuery.isLoading) {
     return <Spinner label="Cargando equipos…" />;
@@ -60,11 +47,12 @@ export default function TeamsPage() {
       <PageBreadcrumb pageTitle="Equipos" />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CompetitionScopeSelect />
+        <p className="text-sm text-gray-500">
+          Equipos registrados en la plataforma.
+        </p>
         <button
           onClick={() => navigate("/admin/teams/new")}
-          disabled={!competitionId}
-          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
         >
           Nuevo equipo
         </button>
@@ -73,7 +61,7 @@ export default function TeamsPage() {
       {teams.length === 0 ? (
         <EmptyState
           title="Sin equipos"
-          description="Creá el primer equipo de la competición para después inscribirlo."
+          description="Creá el primer equipo para después inscribirlo en una competición."
         />
       ) : (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -85,9 +73,6 @@ export default function TeamsPage() {
                     Equipo
                   </th>
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
-                    Competición
-                  </th>
-                  <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
                     Acciones
                   </th>
                 </tr>
@@ -97,9 +82,6 @@ export default function TeamsPage() {
                   <tr key={team.id}>
                     <td className="px-5 py-4 font-medium text-gray-800">
                       {team.name}
-                    </td>
-                    <td className="px-5 py-4 text-gray-500">
-                      {competitionNames.get(team.competition) ?? "—"}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">

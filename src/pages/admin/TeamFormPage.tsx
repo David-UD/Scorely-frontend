@@ -10,8 +10,6 @@ import {
   useCreateTeam,
   useUpdateTeam,
 } from "@/hooks/useAdminModules";
-import { useAdminScopeStore } from "@/store/adminScopeStore";
-import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -32,9 +30,8 @@ export default function TeamFormPage() {
   const navigate = useNavigate();
   const isEditing = Boolean(id);
 
-  const scopeCompetitionId = useAdminScopeStore((s) => s.competitionId);
-  const createMutation = useCreateTeam(scopeCompetitionId);
-  const updateMutation = useUpdateTeam(scopeCompetitionId);
+  const createMutation = useCreateTeam();
+  const updateMutation = useUpdateTeam();
 
   const detailQuery = useQuery({
     queryKey: ["admin", "team", id],
@@ -77,36 +74,17 @@ export default function TeamFormPage() {
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
-    if (isEditing) {
-      const payload: TeamWritePayload = {
-        id: Number(id),
-        name: values.name,
-        competition:
-          detailQuery.data?.competition ?? (scopeCompetitionId as number),
-      };
-      try {
-        await updateMutation.mutateAsync(payload);
-        navigate("/admin/teams", { replace: true });
-      } catch (err) {
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : "No se pudo guardar el equipo. Intenta de nuevo.",
-        );
-      }
-      return;
-    }
-
-    if (!scopeCompetitionId) {
-      setError("Seleccioná una competición para crear el equipo.");
-      return;
-    }
     const payload: TeamWritePayload = {
       name: values.name,
-      competition: scopeCompetitionId,
     };
+    if (isEditing && id) payload.id = Number(id);
+
     try {
-      await createMutation.mutateAsync(payload);
+      if (isEditing) {
+        await updateMutation.mutateAsync(payload);
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
       navigate("/admin/teams", { replace: true });
     } catch (err) {
       setError(
@@ -125,8 +103,6 @@ export default function TeamFormPage() {
         parentPath="/admin/teams"
       />
 
-      {!isEditing && <CompetitionScopeSelect />}
-
       {error && (
         <div
           role="alert"
@@ -136,52 +112,46 @@ export default function TeamFormPage() {
         </div>
       )}
 
-      {!isEditing && !scopeCompetitionId ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
-          Seleccioná una competición para crear un equipo.
-        </div>
-      ) : (
-        <form
-          onSubmit={onSubmit}
-          noValidate
-          className="max-w-2xl rounded-xl border border-gray-200 bg-white p-6"
-        >
-          <div className="flex flex-col gap-4">
-            <div>
-              <label htmlFor="name" className={labelClassName}>
-                Nombre del equipo
-              </label>
-              <input id="name" {...register("name")} className={inputClassName} />
-              {errors.name?.message && (
-                <p className="mt-1 text-xs text-error-600" role="alert">
-                  {errors.name.message}
-                </p>
-              )}
-            </div>
-
-            <div className="mt-2 flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
-              >
-                {saving
-                  ? "Guardando…"
-                  : isEditing
-                    ? "Guardar cambios"
-                    : "Crear equipo"}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/admin/teams")}
-                className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
-              >
-                Cancelar
-              </button>
-            </div>
+      <form
+        onSubmit={onSubmit}
+        noValidate
+        className="max-w-2xl rounded-xl border border-gray-200 bg-white p-6"
+      >
+        <div className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="name" className={labelClassName}>
+              Nombre del equipo
+            </label>
+            <input id="name" {...register("name")} className={inputClassName} />
+            {errors.name?.message && (
+              <p className="mt-1 text-xs text-error-600" role="alert">
+                {errors.name.message}
+              </p>
+            )}
           </div>
-        </form>
-      )}
+
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
+            >
+              {saving
+                ? "Guardando…"
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Crear equipo"}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/admin/teams")}
+              className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

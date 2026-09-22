@@ -11,6 +11,8 @@ import type {
   CompetitionStatus,
   CompetitionType,
   CompetitionWritePayload,
+  Competitor,
+  CompetitorWritePayload,
   EnabledCompetitionCategory,
   EnabledCompetitionCategoryWritePayload,
   EventWod,
@@ -284,8 +286,8 @@ export async function deleteAthlete(id: number): Promise<void> {
 
 // ── Teams ────────────────────────────────────────────────────────────────────
 
-export async function fetchTeams(competitionId: number): Promise<Team[]> {
-  return fetchCatalog<Team>(`/teams/?competition=${competitionId}&page_size=100`);
+export async function fetchTeams(): Promise<Team[]> {
+  return fetchCatalog<Team>("/teams/?page_size=100");
 }
 
 export async function fetchTeam(id: number): Promise<Team> {
@@ -308,4 +310,38 @@ export async function updateTeam(payload: TeamWritePayload): Promise<Team> {
 
 export async function deleteTeam(id: number): Promise<void> {
   await request<void>(`/teams/${id}/`, { method: "DELETE" });
+}
+
+// ── Competitors ───────────────────────────────────────────────────────────────
+
+export async function fetchCompetitors(competitionId: number): Promise<Competitor[]> {
+  return fetchCatalog<Competitor>(
+    `/competitors/?competition=${competitionId}&page_size=100`,
+  );
+}
+
+export async function fetchCompetitor(id: number): Promise<Competitor> {
+  return request<Competitor>(`/competitors/${id}/`);
+}
+
+export async function createCompetitor(
+  payload: CompetitorWritePayload,
+): Promise<Competitor> {
+  return request<Competitor>("/competitors/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCompetitor(
+  payload: CompetitorWritePayload,
+): Promise<Competitor> {
+  return request<Competitor>(`/competitors/${payload.id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCompetitor(id: number): Promise<void> {
+  await request<void>(`/competitors/${id}/`, { method: "DELETE" });
 }

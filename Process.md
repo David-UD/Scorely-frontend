@@ -390,3 +390,41 @@ Para que la sección muestre datos reales, abrir la lectura pública en `leader\
 - `EnabledCompetitionCategoryViewSet` (`apps/events/views.py`) → `GET /enabled-competition-categories/` público.
 - `CompetitionCategoryViewSet` (`apps/events/views.py`) → `GET /competition-categories/` público.
 Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
+
+---
+
+## Paso 29 — Parte II-F — Admin "Competidores" (inscripciones) (COMPLETADO)
+
+> Ejecución del plan `PLAN.md` (Pasos 0–8). CRUD de `Competitor` en `/admin/competitors` (+ `/new` y `/:id/edit`), por competición en scope. Sin tocar el backend.
+
+### Requerimiento
+- Listar, crear, editar y borrar **inscripciones** (atleta `INDIVIDUAL` o equipo `TEAM`) de la competición en scope, con `registration_number` obligatorio y categoría habilitada de esa competición.
+- Decisiones del usuario (2026-09-21): alcance **CRUD completo**; tipos **Individual y por equipos**; **`registration_number` obligatorio**; ítem **"Competidores"**; **sin gate superadmin** (admins de competición + superuser, scope ya filtra).
+
+### Cambios aplicados
+- **`PROMPT.md`**: nueva sección **Parte II-F** (spec + avisos backend).
+- **`src/types/index.ts`**: `CompetitorWritePayload` (FK no usado en `null` — invariante `clean()`).
+- **`src/api/admin.ts`**: `fetchCompetitors(competitionId)` (`?competition={id}&page_size=100`), `fetchCompetitor(id)`, `createCompetitor`, `updateCompetitor` (PATCH), `deleteCompetitor` — JWT por defecto.
+- **`src/hooks/useAdminModules.ts`**: `useAdminCompetitors`, `useCreateCompetitor`, `useUpdateCompetitor`, `useDeleteCompetitor` (invalidate `["admin","competitors", …]`, `staleTime: 30_000`).
+- **`src/pages/admin/CompetitorsPage.tsx`** (nuevo): scope + tabla Nº / Competidor (atleta o equipo resuelto) / Tipo / Categoría (catálogo vía habilitaciones) / Acciones; orden por nº asc; confirm + banner `ApiError`; botón derivada de scope.
+- **`src/pages/admin/CompetitorFormPage.tsx`** (nuevo): tipo dinámico (toggle), zod + `superRefine`, categorías habilitadas por nombre del catálogo, aviso si no hay; en edición carga categorías/equipos de la **competición del registro** y el PATCH la conserva; payload con FK no usado en `null`.
+- **`src/App.tsx`**: rutas `/admin/competitors[/new/:id/edit]`. **`src/components/admin/icons.tsx`**: `UserPlusIcon`. **`AdminSidebar.tsx`**: ítem "Competidores".
+- **Tests**: `makeAthlete`/`makeTeam` en `fixtures.ts`; bloque "competitors" en `adminApi.test.ts`; `CompetitorsPage.test.tsx` y `CompetitorFormPage.test.tsx` (nuevos).
+
+### Tests (+15, 93 → **108**)
+- `tests/adminApi.test.ts` (+4): LIST `?competition=8&page_size=100` sin `{auth:false}`, GET detalle, POST con FK de tipo en `null`, PATCH/DELETE por id.
+- `tests/CompetitorsPage.test.tsx` (+5): spinner; tabla con atleta/equipo/categoría por nombre; vacío; eliminar con confirm; error de borrado → banner; botón nuevo deshabilitado sin scope.
+- `tests/CompetitorFormPage.test.tsx` (+6): alta Individual (POST con `athlete` y `team:null`); toggle a Equipo (POST con `team` y `athlete:null`); edición precarga y PATCH conserva competición; error al guardar → banner; sin categorías habilitadas bloquea; nulos si falta scope.
+- Aprendizaje: con react-hook-form + `zodResolver` el submit es async en jsdom → usar `fireEvent.submit(form)` + `waitFor`/`findBy*` (el `fireEvent.click` sobre el botón no disparaba `handleSubmit`).
+
+### Verificación
+- `npm run lint` → OK (0 errores; 1 warning preexistente `SidebarContext.tsx`)
+- `npm run typecheck` → OK
+- `npm run test` → **108/108** (16 archivos)
+- `npm run build` → OK (Vite 6.4.3)
+
+### Aviso al usuario (backend)
+1. **Escrituras sin guard de competición/rol**: `CompetitorViewSet` (`apps/participants/views.py:50`) usa `IsAuthenticatedOrReadOnly` → cualquier usuario autenticado puede crear/editar/borrar inscripciones de cualquier competición. Recomendación: replicar `TeamViewSet` (`IsCompetitionAdmin` + `visible_competitions_q` + guard en `create()`, `views.py:24-41`). La restricción visual queda a nivel frontend (scope).
+2. **`registration_number` sin unicidad** (`blank=True`): la UI lo exige; si se quiere único por competición es `UniqueConstraint` en backend.
+3. **Borrado en uso**: FK `enabled_competition_category` `PROTECT` + `Competitor` en resultados → `DELETE` puede fallar; la UI muestra el banner.
+4. Relación con **Parte II-E**: cada inscripción incrementa el recuento público "Categorías e inscritos".

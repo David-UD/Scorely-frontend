@@ -1,5 +1,6 @@
 import type {
   Affiliation,
+  Athlete,
   Competition,
   CompetitionCategory,
   Competitor,
@@ -9,6 +10,7 @@ import type {
   EventWod,
   EventResult,
   EventPhase,
+  Team,
 } from "@/types";
 
 export function makeAffiliation(overrides: Partial<Affiliation> = {}): Affiliation {
@@ -71,6 +73,28 @@ export function makeCompetitor(overrides: Partial<Competitor> = {}): Competitor 
     registration_number: "001",
     competition: 1,
     enabled_competition_category: 1,
+    ...overrides,
+  };
+}
+
+export function makeAthlete(overrides: Partial<Athlete> = {}): Athlete {
+  return {
+    id: 10,
+    first_name: "Ana",
+    last_name: "López",
+    birth_date: "1992-04-12",
+    gender: "F",
+    profile_photo: null,
+    affiliation: null,
+    ...overrides,
+  };
+}
+
+export function makeTeam(overrides: Partial<Team> = {}): Team {
+  return {
+    id: 20,
+    name: "Team El Pilar",
+    affiliation: null,
     ...overrides,
   };
 }

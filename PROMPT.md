@@ -423,7 +423,78 @@ Vista pública del detalle de competición: sección de **categorías habilitada
 
 ---
 
-# Parte II — Plantilla de especificación de la actualización
+# Parte II-F — Módulo admin: Competidores (inscripciones)
+
+## 1. Título
+
+Módulo de administración de **competencias/inscripciones** en el panel: CRUD de `Competitor` en `/admin/competitors` (más `/admin/competitors/new` y `/admin/competitors/:id/edit`), por competición en scope.
+
+## 2. Objetivo
+
+- Permitir al **admin de competición** (y al superuser) **inscribir atletas o equipos** en la competición seleccionada, asignándolos a una **categoría habilitada**, con un **número de inscripción**.
+- La inscripción (`Competitor`) es la **fuente** del recuento público "Categorías e inscritos" de la Parte II-E: cada alta aquí incrementa ese recuento.
+
+## 3. Alcance
+
+**Incluye:**
+- Listado por `CompetitionScopeSelect`: tabla con Nº de inscripción, competidor (atleta o equipo), tipo (`Individual`/`Equipo`) y categoría (nombre).
+- Alta/edición con **tipo dinámico** (Individual → select de atleta; Equipo → select de equipo), **`registration_number` obligatorio**, select de **categorías habilitadas** de la competición (nombre del catálogo), `competition` = scope (alta) o el del registro (edición).
+- Baja con confirmación y banner de `ApiError`.
+- Ítem **"Competidores"** en el sidebar (`manageItems`) y rutas bajo `/admin`.
+
+**Excluye / decisiones:**
+- **Sin gate superadmin**: lo usan los admins de competición sobre sus competiciones asignadas (`useAdminCompetitions` ya limita por asignación; superuser ve todas).
+- **No se toca el backend**: las escrituras usan el **JWT** actual (`CompetitorViewSet` = `IsAuthenticatedOrReadOnly` requiere autenticación para escribir). Sin cambios de permisos.
+- `registration_number` obligatorio en la UI (el modelo lo tiene `blank=True`, sin unicidad).
+- No se gestionan resultados/scoring (fuera del alcance).
+
+## 4. Endpoints del API utilizados
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Listar inscritos de la competición | GET | `/api/v1/competitors/?competition={id}` | JWT (lectura pública OK) | `CompetitorSerializer` = `(id, competitor_type, athlete, team, registration_number, competition, enabled_competition_category)`; usar `page_size=100` |
+| Detalle | GET | `/api/v1/competitors/{id}/` | JWT | Retrieve |
+| Alta | POST | `/api/v1/competitors/` | **JWT (escritura)** | Payload: `{competitor_type, athlete \| null, team \| null, registration_number, competition, enabled_competition_category}` |
+| Edición | PATCH | `/api/v1/competitors/{id}/` | JWT (escritura) | Parcial; `competition` conserva el registro |
+| Baja | DELETE | `/api/v1/competitors/{id}/` | JWT (escritura) | `.json` responde 4xx si está en uso (FK) |
+
+Catálogos auxiliares ya cableados en el admin (para armar selects/nombres): `/athletes/?page_size=100`, `/teams/?competition={id}&page_size=100`, `/enabled-competition-categories/?competition={id}` y `/competition-categories/?page_size=100`.
+
+> ⚠️ **Aviso backend (no se toca en esta Parte II-F):** `CompetitorViewSet` no filtra por competición ni valida rol → cualquier usuario autenticado puede escribir sobre cualquier competición. La seguridad real es un cambio backend. *(Nota Parte II-G: `TeamViewSet` ya no sirve como patrón de guard porque los equipos pasaron a catálogo global.)*
+
+## 5. Datos / DTOs
+
+- `CompetitorWritePayload` (DTO nuevo): `{ id?, competitor_type: "INDIVIDUAL"|"TEAM", athlete: number|null, team: number|null, registration_number, competition, enabled_competition_category }` — el FK no usado va `null` (invariante del `clean()` del backend).
+- `Competitor` (ya existe, Parte II-E): `{ id, competitor_type, athlete?, team?, registration_number, competition, enabled_competition_category }`.
+- Reutilizados: `Athlete`, `Team`, `EnabledCompetitionCategory` (`competition_category: number`), `CompetitionCategory` (catálogo de nombres).
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: `CompetitorWritePayload`.
+- `src/api/admin.ts`: `fetchCompetitors(competitionId)`, `fetchCompetitor(id)`, `createCompetitor`, `updateCompetitor`, `deleteCompetitor` (patrón Athletes/Teams, con JWT).
+- `src/hooks/useAdminModules.ts`: `useAdminCompetitors(competitionId)`, `useCreateCompetitor`, `useUpdateCompetitor`, `useDeleteCompetitor` (invalidan `["admin","competitors", …]`).
+- `src/pages/admin/CompetitorsPage.tsx` (nuevo): scope + tabla + alta/edición/baja (patrón `TeamsPage`).
+- `src/pages/admin/CompetitorFormPage.tsx` (nuevo): tipo dinámico Individual/Equipo, nº obligatorio, categoría habilitada (patrón `TeamFormPage`).
+- `src/App.tsx` + `AdminSidebar.tsx` + `icons.tsx`: rutas, ítem "Competidores", `UserPlusIcon`.
+- Tests: fixtures `makeAthlete`/`makeTeam`, bloque en `adminApi.test.ts`, `CompetitorsPage.test.tsx` y `CompetitorFormPage.test.tsx`.
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| LIST | `/admin/competitors` con datos | Tabla con nº, competidor, tipo y categoría (nombres resueltos) |
+| Alta Individual | Form completo | POST con `athlete` y `team: null`; aciertos/errores de validación |
+| Alta Equipo | Toggle a Equipo | Select de equipos del scope; POST con `team` y `athlete: null` |
+| Edición | `/admin/competitors/:id/edit` | Precarga y PATCH conservando `competition` |
+| Baja | Confirm | Llama a `deleteCompetitor`; `ApiError` → banner |
+| Sin scope | `/admin/competitors` sin competición | Botón "Nuevo competidor" deshabilitado |
+
+## 8. Observaciones / riesgos
+
+- **Escrituras sin guard de competición** en el backend: la exposición visual queda limitada por el scope (frontend); la seguridad real es aviso al backend. *(Nota Parte II-G: el patrón `TeamViewSet` con `IsCompetitionAdmin` dejó de existir; los equipos son ahora catálogo global.)*
+- **Borrado en uso**: `enabled_competition_category` usa `on_delete=PROTECT` y el `Competitor` es FK de entradas con resultados → el DELETE puede fallar; la UI muestra el banner.
+- **Unicidad del número de inscripción**: no existe constraint; si se requiere "1 número por competición", es cambio backend.
+- **Relación con Parte II-E**: la inscripción es la fuente del recuento público "Categorías e inscritos".
 
 ## 1. Título
 
@@ -584,6 +655,108 @@ Checklist verificable al terminar:
 - **Cambio de fases/etapas → competition + phase (RESUELTO en backend, usuario):** el modelo `CompetitionStage` fue eliminado; `Event` cuelga directo de `Competition` con `phase` (`QUALIFIER`/`FINAL`). `EnabledCompetitionCategory.finalist_slots` define cuántos pasan a la Final por categoría. Los endpoints `/api/v1/competition-stages/` y los filtros `competition_stage*` **ya no existen**; usar `/api/v1/events/?competition={id}&phase=...`.
 - **`event_results[]` ya en el payload (RESUELTO en backend, usuario):** el serializer del leaderboard devuelve por WOD un objeto `{event_id, event_number, event_name, phase, result, event_rank, score}`. El frontend lo consume directo; si un campo no llega, se renderiza `-`.
 - **Ordinales en inglés y top-3 (decisión de UI):** puesto por WOD como `1st/2nd/3rd…` (inglés) con los 3 primeros resaltados (dorado/plata/bronce).
+
+---
+
+# Parte II-G — Equipos globales (catálogo al estilo Atletas)
+
+## 1. Título
+
+Los **equipos dejan de pertenecer a una competición**: pasan a ser un **catálogo
+global como `Athlete`**. La competición de una inscripción queda representada
+**solo en `Competitor`** (que ya la guarda). Elimina la redundancia actual
+`Team.competition` + `Competitor.competition`.
+
+## 2. Objetivo
+
+`Team` es una entidad que existe **una vez** y se inscribe en varias competiciones.
+Hoy el modelo la duplica (`Team.competition` obligatoria). La Parte II-G:
+
+1. **Elimina la FK `Team.competition`** en el backend (`participants`).
+2. Convierte **`TeamViewSet` en espejo de `AthleteViewSet`** (global, sin guard de
+   competición, permisos `(IsAuthenticated,)`).
+3. Refleja el cambio en el admin: **`/admin/teams` deja de estar por scope** y el
+   select de **Equipo** en Competidores trae **todos** los equipos.
+
+## 3. Alcance
+
+**Se implementa (esta iteración SÍ toca el backend, aprobado por el usuario):**
+
+Backend (`leader\Scorely`):
+- `participants.models.Team`: quitar `competition` (FK obligatoria,
+  `CASCADE`, `related_name='teams'`).
+- `participants.serializers.TeamSerializer`: fields = `(id, name, affiliation)`.
+- `participants.views.TeamViewSet`: `(IsAuthenticated,)`, queryset global,
+  `search_fields = ('name',)`, `filterset_fields = ('affiliation',)`; eliminar
+  `get_queryset()` (filtro por `visible_competitions_q`) y el `create()` con guard.
+  Limpiar imports sin uso (`PermissionDenied`, `IsCompetitionAdmin`,
+  `visible_competitions_q`).
+- `participants.admin.TeamAdmin`: sin `competition`.
+- Migración `participants/0003_remove_team_competition*` (**se genera, no se
+  aplica**: la BD la migra el usuario; los tests usan `--nomigrations`).
+- `users.management.commands.seed_data.create_team()`: equipos **globales**
+  (sin `competition`).
+- Tests: `conftest.team` sin competición; bloque de equipos en
+  `test_permissions.py` reescrito al modelo global (espejo de atletas).
+
+Frontend (`Scorely-frontend`):
+- `src/types/index.ts`: `Team` y `TeamWritePayload` **sin `competition`**.
+- `src/api/admin.ts`: `fetchTeams()` global (`/teams/?page_size=100`).
+- `src/hooks/useAdminModules.ts`: `useAdminTeams()` y mutaciones sin
+  `competitionId` (invalidan `["admin","teams"]`).
+- `src/pages/admin/TeamsPage.tsx` y `TeamFormPage.tsx`: **espejo de
+  `AthletesPage`/`AthleteFormPage`** (sin `CompetitionScopeSelect`, sin columna
+  "Competición", sin gate de scope; botón "Nuevo equipo" siempre habilitado).
+- `src/pages/admin/CompetitorsPage.tsx` y `CompetitorFormPage.tsx`: equipos
+  globales (`useAdminTeams()`); las **categorías habilitadas siguen por
+  competición** (`useAdminEnabledCategories`).
+
+**No se toca** (salvo verificación): `Competitor` (ya guarda `competition`),
+`events`, `rankings`, `scoring` (no usan `Team.competition`).
+
+## 4. Endpoints (antes → después)
+
+| Acción | Método | URL | Auth | Antes | Después |
+|--------|--------|-----|------|-------|---------|
+| Listar equipos | GET | `/api/v1/teams/` | JWT | `/teams/?competition={id}` (filtrado por rol/competición) | Global: `/teams/?page_size=100` |
+| Detalle | GET | `/api/v1/teams/{id}/` | JWT | Modelo con `competition` | Modelo sin `competition` |
+| Alta | POST | `/api/v1/teams/` | **JWT (cualquier autenticado)** | Requería `competition` + `IsCompetitionAdmin` | Payload `{ name }` (afiliación opcional) |
+| Edición | PATCH | `/api/v1/teams/{id}/` | JWT | Con `competition` | Sin `competition` |
+| Baja | DELETE | `/api/v1/teams/{id}/` | JWT | — | — |
+
+## 5. Datos / DTOs
+
+- `Team` (frontend): `{ id, name, affiliation?: number | null }` (sin `competition`).
+- `TeamWritePayload` (frontend): `{ id?, name }`.
+- `Competitor`/`CompetitorWritePayload` **no cambian** (ya llevan `competition`,
+  `team`).
+
+## 6. Cambios en componentes / estructura
+
+Ver §2. La UI sigue siendo idioma español, tema claro, patrones TailAdmin.
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Backend API | `GET /teams/` autenticado | Ve **todos** los equipos (global) |
+| Backend API | `POST /teams/` `{name}` autenticado | **201** sin `competition` |
+| Backend modelo | `Team.objects.create(name=...)` | OK sin competición |
+| Frontend `TeamsPage` | `/admin/teams` | Lista global, sin selector ni columna Competición |
+| Frontend `CompetitorFormPage` | Alta Equipo | El select de Equipo trae **todos** los equipos |
+| Frontend admin API | `fetchTeams()` | `request("/teams/?page_size=100")` (JWT, sin `{auth:false}`) |
+
+## 8. Observaciones / riesgos
+
+- **Destructivo**: se elimina la FK `Team.competition`; la relación histórica
+  equipo→competición que no pasa por `Competitor` se pierde (aceptado).
+- **Permisos**: con el espejo de atletas, cualquier usuario autenticado puede
+  crear/editar/borrar equipos globales (igual que atletas hoy).
+- **Roster `TeamMember`**: el endpoint `/team-members/` existe en backend, pero no
+  hay UI de admin para gestionar integrantes (follow-up sugerido, fuera de alcance).
+- **Competidor sigue sin guard por competición** (`CompetitorViewSet`):
+  el aviso de la Parte II-F sigue vigente; `TeamViewSet` ya no sirve como patrón
+  de referencia de guard.
 
 ---
 
