@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   useAdminCompetitions,
@@ -11,6 +11,7 @@ import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
 import StatusBadge from "@/components/common/StatusBadge";
 import { formatDateRange } from "@/utils/format";
+import { filterByName, sortByName, type SortDir } from "@/utils/sortFilter";
 
 export default function CompetitionsPage() {
   const navigate = useNavigate();
@@ -18,6 +19,18 @@ export default function CompetitionsPage() {
   const deleteMutation = useDeleteCompetition();
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const isSuperUser = Boolean(useAuthStore((s) => s.user?.is_superuser));
+  const [search, setSearch] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const competitions = useMemo(
+    () =>
+      sortByName(
+        filterByName(competitionsQuery.data ?? [], search, (c) => c.name),
+        sortDir,
+        (c) => c.name,
+      ),
+    [competitionsQuery.data, search, sortDir],
+  );
 
   if (competitionsQuery.isLoading) {
     return <Spinner label="Cargando competiciones…" />;
@@ -31,8 +44,6 @@ export default function CompetitionsPage() {
       />
     );
   }
-
-  const competitions = competitionsQuery.data ?? [];
 
   const handleDelete = (id: number, name: string) => {
     if (!window.confirm(`¿Eliminar la competición "${name}"? Esta acción no se puede deshacer.`)) {
@@ -50,23 +61,38 @@ export default function CompetitionsPage() {
         pageTitle={isSuperUser ? "Competiciones" : "Mis competiciones"}
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-500">
           {isSuperUser
             ? "Administrá todas las competiciones de la plataforma."
             : "Estas son las competiciones que tenés asignadas."}
         </p>
-        {isSuperUser && (
-          <button
-            onClick={() => navigate("/admin/competitions/new")}
-            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
-          >
-            Nueva competición
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre…"
+            aria-label="Buscar por nombre"
+            className="w-full max-w-xs rounded-lg border border-gray-200 bg-transparent px-4 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-300 focus:ring-1 focus:ring-brand-200 sm:w-auto"
+          />
+          {isSuperUser && (
+            <button
+              onClick={() => navigate("/admin/competitions/new")}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
+            >
+              Nueva competición
+            </button>
+          )}
+        </div>
       </div>
 
-      {competitions.length === 0 ? (
+      {competitions.length === 0 && search ? (
+        <EmptyState
+          title="Sin coincidencias"
+          description="No se encontraron competiciones que coincidan con la búsqueda."
+        />
+      ) : competitions.length === 0 ? (
         <EmptyState
           title={isSuperUser ? "Sin competiciones" : "Sin competiciones asignadas"}
           description={
@@ -81,8 +107,17 @@ export default function CompetitionsPage() {
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
-                    Nombre
+                  <th
+                    onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                    aria-sort={sortDir === "asc" ? "ascending" : "descending"}
+                    className="cursor-pointer select-none px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Nombre
+                      <span className="text-gray-400" aria-hidden="true">
+                        {sortDir === "asc" ? "▲" : "▼"}
+                      </span>
+                    </span>
                   </th>
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
                     Tipo

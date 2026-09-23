@@ -503,12 +503,138 @@ inscripciones de competidores siguen por competición.
 
 ---
 
+## Iteración 2026-09-23 — Creación inline de atleta/equipo en el formulario de competidor
+
+Mejora de UX: desde `/admin/competitors/new` (y `/:id/edit`) se puede crear un
+**atleta** (tipo Individual) o un **equipo** (tipo Equipo) sin abandonar el
+formulario. El registro creado queda **seleccionado automáticamente** en su
+`<select>` y el usuario continúa con la inscripción. Sin cambios de backend: se
+reutilizan `POST /athletes/` y `POST /teams/` (que ya devuelven el recurso con
+`id`).
+
+### Cambios
+- `src/components/admin/InlineEntitySelect.tsx` (**nuevo**): componente
+  reutilizable — `<select>` + botón "+ Nuevo" + panel inline colapsable con mini
+  formulario propio (`react-hook-form` + `zodResolver` derivado de `fields`).
+  Sin `<form>` anidado (botones `type="button"`); error de creación inline con
+  `role="alert"`; `key` desde el padre para reiniciar al alternar tipo.
+- `src/pages/admin/CompetitorFormPage.tsx`: reemplazados los `<select>` de
+  Atleta/Equipo por `InlineEntitySelect`. Individual → campos Nombre, Apellido,
+  Fecha de nacimiento, Sexo (`useCreateAthlete`); Equipo → solo Nombre
+  (`useCreateTeam`). Tras crear, `setValue("athlete"|"team", String(id))`.
+- `tests/CompetitorFormPage.test.tsx`: mocks de `useCreateAthlete`/`useCreateTeam`
+  y listas dinámicas; casos: crear atleta inline, crear equipo inline
+  (selección automática), validación inline, error de creación inline,
+  cierre del panel al alternar tipo.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente) |
+| `npm run test` | **148/148** en verde (20 archivos) |
+| `npm run build` | OK (warning chunk >500 kB preexistente) |
+
+### Notas
+- Sin cambios de backend (`leader\Scorely`); solo reutilización de endpoints y
+  hooks existentes.
+- Las páginas `AthletesPage`/`TeamsPage` se mantienen **globales** (decisión del
+  usuario, Parte II-G); `page_size=100` sin cambios.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
+## Iteración 2026-09-23 — Inscripción opcional integrada en el alta de atleta (Parte II-I)
+
+Mejora de UX: desde `/admin/athletes/new` se puede crear el atleta y, de forma
+**opcional**, inscribirlo en una competición (Individual + categoría) en la misma
+acción, gracias a una **sección colapsable "Inscribir en competición (opcional)"**.
+Sin cambios de backend: se reutilizan `POST /athletes/` y `POST /competitors/`.
+
+### Decisiones del usuario
+1. **Sumar bloque inline en atleta**: se mantiene el inline de `CompetitorFormPage`
+   (Parte II anterior) y se agrega la sección opcional en el alta de atleta.
+2. **Nº de inscripción manual opcional** (el backend lo acepta vacío: `blank=True`).
+3. El bloque aparece **solo en modo creación** (`/admin/athletes/:id/edit` no lo muestra).
+
+### Cambios
+- `src/pages/admin/AthleteFormPage.tsx`: sección colapsable (`aria-expanded`)
+  tras Fecha de nacimiento/Sexo con select de **Competición**
+  (`useAdminCompetitions`), select de **Categoría** dependiente
+  (`useAdminEnabledCategories(competitionId)` + nombres del catálogo) y campo
+  **Nº de inscripción (opcional)**. En el `onSubmit`: si hay competición sin
+  categoría → error en el bloque y no crea nada; al guardar con inscripción se
+  llama en secuencia `createAthlete` → `createCompetitor` (`INDIVIDUAL`,
+  `athlete = atleta.id`, `team: null`). Si la 2ª llamada falla, la UI avisa
+  "El atleta se guardó, pero la inscripción falló…" y conserva el atleta creado
+  (`createdAthleteRef`) para reintentar **sin duplicar**.
+- `tests/AthleteFormPage.test.tsx` (**nuevo**, 5 casos): alta simple sin
+  inscribir (no llama al competidor), alta + inscripción (payload de ambos,
+  `athlete = id` del creado), competición sin categoría (error, nada se crea),
+  fallo de inscripción (aviso + reintento sin recrear atleta), bloque ausente en
+  edición con PATCH que conserva `id`.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **153/153** en verde (21 archivos) |
+| `npm run build` | OK (warning chunk >500 kB preexistente) |
+
+### Notas
+- **Dos llamadas no transaccionales**: atleta + competidor. Ante fallo de la
+  inscripción el atleta queda creado; se informa y se permite reintentar solo la
+  inscripción. Aviso de `CompetitorViewSet` sin guard de competición/rol sigue
+  vigente (ver Parte II-F).
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
+## Iteración 2026-09-23 — Inscripción opcional integrada en el alta de equipo (Parte II-J)
+
+Extensión de la Parte II-I: el bloque colapsable **"Inscribir en competición
+(opcional)"** se replica en `/admin/teams/new`. Al guardar se crea el equipo
+(`POST /teams/`) y, si se eligió competición + categoría, la inscripción
+(`POST /competitors/` con `competitor_type: "TEAM"`) en la misma acción.
+Sin cambios de backend.
+
+### Cambios
+- `src/pages/admin/TeamFormPage.tsx`: espejo del bloque de `AthleteFormPage`:
+  selección de **Competición** (`useAdminCompetitions`), **Categoría**
+  dependiente (`useAdminEnabledCategories` + nombres del catálogo) y **Nº de
+  inscripción (opcional)**; solo en modo creación. `onSubmit`: competición sin
+  categoría → error en el bloque y no crea nada; al inscribir → `createTeam` →
+  `createCompetitor` (`TEAM`, `athlete: null`, `team = equipo.id`). Ante fallo de
+  la 2ª llamada avisa "El equipo se guardó, pero la inscripción falló…" y
+  conserva el equipo creado (`createdTeamRef`) para reintentar sin duplicar.
+- `tests/TeamFormPage.test.tsx` (**nuevo**, 5 casos): espejo de atleta — alta
+  simple sin inscribir (no llama al competidor), alta + inscripción (payload
+  `TEAM` con `team = id` del creado), competición sin categoría (error, nada se
+  crea), fallo de inscripción (aviso + reintento sin recrear equipo), bloque
+  ausente en edición con PATCH que conserva `id`.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **158/158** en verde (22 archivos) |
+| `npm run build` | OK (warning chunk >500 kB preexistente) |
+
+### Notas
+- Mismas 2 llamadas no transaccionales que la Parte II-I; el reintento tras
+  fallo de inscripción no duplica el equipo.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
 - [x] lint sin errores
 - [x] typecheck sin errores
-- [x] suite de tests en verde (frontend 55/55)
+- [x] suite de tests en verde (frontend actual: 22 archivos / 158 tests)
 - [x] `/` renderiza recientes + pestaña "todas" (con backend disponible/público)
 - [x] `/` muestra **todas las competiciones publicadas** con sesión activa o no (2026-09-14)
 - [x] detalle muestra info, afiliación, fechas, mapa, WODs y leaderboard
@@ -522,6 +648,12 @@ inscripciones de competidores siguen por competición.
 - [x] (2026-09-21) módulo admin de sedes: CRUD del catálogo en `/admin/sedes` solo superadmin (Parte II-D)
 - [x] (2026-09-21) vista pública: categorías habilitadas con recuento de inscritos antes de Workouts, con degradación elegante si el backend aún no expone los endpoints en lectura pública (Parte II-E)
 - [x] (2026-09-21) módulo admin de competidores: CRUD de inscripciones en `/admin/competitors` por scope (Individual/Equipo, nº obligatorio), para admins de competición y superuser (Parte II-F)
+- [x] (2026-09-22) módulo admin de equipos globales: `/admin/teams` sin scope ni columna Competición, catálogo global estilo Atletas, select global en Competidores (Parte II-G)
+- [x] (2026-09-23) filtros de búsqueda y ordenamiento: búsqueda por nombre + orden asc/desc de la columna Nombre en las 5 tablas admin (competiciones, filiaciones, sedes, atletas, equipos); headers del leaderboard público ordenables (Parte II-H, 100 % cliente)
+- [x] (2026-09-23) creación inline de atleta/equipo: desde el formulario de competidor, mini-form + selección automática del registro creado, sin abandonar la página (mejora de UX)
+- [x] (2026-09-23) inscripción opcional en el alta de atleta: sección colapsable "Inscribir en competición" en `/admin/athletes/new` (competición + categoría + nº opcional) que crea atleta y luego competidor Individual en una sola acción (Parte II-I)
+- [x] (2026-09-23) inscripción opcional en el alta de equipo: mismo bloque en `/admin/teams/new` que crea equipo y luego competidor de equipo en una sola acción (Parte II-J)
+- [x] suite de tests en verde (frontend 153/153 → **158/158**) (2026-09-23)
 
 ## No se tocó
 

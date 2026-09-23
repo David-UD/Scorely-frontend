@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ApiError } from "@/api/client";
 import {
   useAdminTeams,
   useDeleteTeam,
@@ -8,12 +9,26 @@ import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
+import { filterByName, sortByName, type SortDir } from "@/utils/sortFilter";
 
 export default function TeamsPage() {
   const navigate = useNavigate();
   const teamsQuery = useAdminTeams();
   const deleteMutation = useDeleteTeam();
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [error, setError] = useState<string | null>(null);
+
+  const teams = useMemo(
+    () =>
+      sortByName(
+        filterByName(teamsQuery.data ?? [], search, (t) => t.name),
+        sortDir,
+        (t) => t.name,
+      ),
+    [teamsQuery.data, search, sortDir],
+  );
 
   if (teamsQuery.isLoading) {
     return <Spinner label="Cargando equipos…" />;
@@ -28,16 +43,20 @@ export default function TeamsPage() {
     );
   }
 
-  const teams = [...(teamsQuery.data ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name, "es"),
-  );
-
   const handleDelete = (id: number, name: string) => {
     if (!window.confirm(`¿Eliminar el equipo "${name}"? Esta acción no se puede deshacer.`)) {
       return;
     }
+    setError(null);
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onError: (err) => {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "No se pudo eliminar el equipo.",
+        );
+      },
       onSettled: () => setDeletingId(null),
     });
   };
@@ -47,9 +66,14 @@ export default function TeamsPage() {
       <PageBreadcrumb pageTitle="Equipos" />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">
-          Equipos registrados en la plataforma.
-        </p>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nombre…"
+          aria-label="Buscar por nombre"
+          className="w-full max-w-xs rounded-lg border border-gray-200 bg-transparent px-4 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-300 focus:ring-1 focus:ring-brand-200 sm:w-auto"
+        />
         <button
           onClick={() => navigate("/admin/teams/new")}
           className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
@@ -58,7 +82,21 @@ export default function TeamsPage() {
         </button>
       </div>
 
-      {teams.length === 0 ? (
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-error-100 bg-error-50 px-4 py-3 text-sm text-error-700"
+        >
+          {error}
+        </div>
+      )}
+
+      {teams.length === 0 && search ? (
+        <EmptyState
+          title="Sin coincidencias"
+          description="No se encontraron equipos que coincidan con la búsqueda."
+        />
+      ) : teams.length === 0 ? (
         <EmptyState
           title="Sin equipos"
           description="Creá el primer equipo para después inscribirlo en una competición."
@@ -69,8 +107,17 @@ export default function TeamsPage() {
             <table className="w-full min-w-[520px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
-                    Equipo
+                  <th
+                    onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                    aria-sort={sortDir === "asc" ? "ascending" : "descending"}
+                    className="cursor-pointer select-none px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Equipo
+                      <span className="text-gray-400" aria-hidden="true">
+                        {sortDir === "asc" ? "▲" : "▼"}
+                      </span>
+                    </span>
                   </th>
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
                     Acciones

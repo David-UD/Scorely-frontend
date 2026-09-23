@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
 import { renderWithProviders, queryResult } from "./utils";
 import { makeAffiliation } from "./fixtures";
 import AffiliationsPage from "@/pages/admin/AffiliationsPage";
@@ -105,5 +105,46 @@ describe("AffiliationsPage", () => {
     screen.getByText("Eliminar").click();
     expect(await screen.findByRole("alert")).toBeDefined();
     confirmSpy.mockRestore();
+  });
+
+  it("filters affiliations by name (case and accent insensitive)", () => {
+    mockedAffiliations.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeAffiliation({ id: 1, name: "Álvarez Box" }),
+          makeAffiliation({ id: 2, name: "HYROX Core" }),
+        ],
+      }),
+    );
+    renderWithProviders(<AffiliationsPage />);
+    const input = screen.getByRole("searchbox", { name: /buscar/i });
+    fireEvent.change(input, { target: { value: "alvarez" } });
+    expect(screen.getByText("Álvarez Box")).toBeDefined();
+    expect(screen.queryByText("HYROX Core")).toBeNull();
+  });
+
+  it("sorts by name on header click", () => {
+    mockedAffiliations.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeAffiliation({ id: 1, name: "Zeta Box" }),
+          makeAffiliation({ id: 2, name: "Alpha Box" }),
+        ],
+      }),
+    );
+    renderWithProviders(<AffiliationsPage />);
+    const rows = () =>
+      Array.from(screen.getAllByRole("row")).map((r) => r.textContent);
+    expect(rows().findIndex((r) => r?.startsWith("Alpha"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Zeta")),
+    );
+
+    const header = screen.getByRole("columnheader", { name: /nombre/i });
+    fireEvent.click(header);
+    expect(rows().findIndex((r) => r?.startsWith("Zeta"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Alpha")),
+    );
   });
 });

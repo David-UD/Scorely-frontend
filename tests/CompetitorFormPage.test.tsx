@@ -22,6 +22,8 @@ import { useAdminScopeStore } from "@/store/adminScopeStore";
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
+const createAthleteMutate = vi.fn();
+const createTeamMutate = vi.fn();
 
 vi.mock("@/components/admin/CompetitionScopeSelect", () => ({
   default: () => null,
@@ -43,6 +45,14 @@ vi.mock("@/hooks/useAdminModules", async () => {
     useAdminCompetitionCategories: vi.fn(),
     useCreateCompetitor: () => ({ mutateAsync: createMutate, isPending: false }),
     useUpdateCompetitor: () => ({ mutateAsync: updateMutate, isPending: false }),
+    useCreateAthlete: () => ({
+      mutateAsync: createAthleteMutate,
+      isPending: false,
+    }),
+    useCreateTeam: () => ({
+      mutateAsync: createTeamMutate,
+      isPending: false,
+    }),
   };
 });
 
@@ -52,15 +62,20 @@ const mockedEnabled = vi.mocked(useAdminEnabledCategories);
 const mockedCatalog = vi.mocked(useAdminCompetitionCategories);
 const mockedFetchCompetitor = vi.mocked(fetchCompetitor);
 
+let athletesData: ReturnType<typeof makeAthlete>[];
+let teamsData: ReturnType<typeof makeTeam>[];
+
 function mockQueries() {
+  athletesData = [makeAthlete({ id: 10 }), makeAthlete({ id: 11, first_name: "Leo", last_name: "Mora" })];
+  teamsData = [makeTeam({ id: 20 })];
   mockedAthletes.mockReturnValue(
     queryResult({
       isLoading: false,
-      data: [makeAthlete({ id: 10 }), makeAthlete({ id: 11, first_name: "Leo", last_name: "Mora" })],
+      data: athletesData,
     }),
   );
   mockedTeams.mockReturnValue(
-    queryResult({ isLoading: false, data: [makeTeam({ id: 20 })] }),
+    queryResult({ isLoading: false, data: teamsData }),
   );
   mockedEnabled.mockReturnValue(
     queryResult({
@@ -80,6 +95,8 @@ beforeEach(() => {
   useAdminScopeStore.setState({ competitionId: 1 });
   createMutate.mockReset();
   updateMutate.mockReset();
+  createAthleteMutate.mockReset();
+  createTeamMutate.mockReset();
   vi.clearAllMocks();
   mockQueries();
 });
@@ -226,5 +243,121 @@ describe("CompetitorFormPage", () => {
     expect(
       screen.getByText(/No hay categorías habilitadas para esta competición/),
     ).toBeDefined();
+  });
+
+  it("creates an athlete inline and selects it in the form", async () => {
+    createAthleteMutate.mockImplementation(async (payload: { id?: number }) => {
+      const created = makeAthlete({ id: 99, first_name: "Sofía", last_name: "Ruiz" });
+      mockedAthletes.mockReturnValue(
+        queryResult({ isLoading: false, data: [...athletesData, created] }),
+      );
+      return { id: 99, ...payload };
+    });
+    renderWithProviders(<CompetitorFormPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo" }));
+    fireEvent.change(screen.getByLabelText("Nombre"), {
+      target: { value: "Sofía" },
+    });
+    fireEvent.change(screen.getByLabelText("Apellido"), {
+      target: { value: "Ruiz" },
+    });
+    fireEvent.change(screen.getByLabelText("Fecha de nacimiento"), {
+      target: { value: "1995-01-01" },
+    });
+    fireEvent.change(screen.getByLabelText("Sexo"), {
+      target: { value: "F" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear" }));
+
+    await waitFor(() =>
+      expect(createAthleteMutate).toHaveBeenCalledWith({
+        first_name: "Sofía",
+        last_name: "Ruiz",
+        birth_date: "1995-01-01",
+        gender: "F",
+      }),
+    );
+    await waitFor(() => {
+      const athleteSelect = screen.getByLabelText("Atleta") as HTMLSelectElement;
+      expect(athleteSelect.value).toBe("99");
+    });
+    expect(screen.getByRole("option", { name: "Sofía Ruiz" })).toBeDefined();
+  });
+
+  it("creates a team inline and selects it in the form", async () => {
+    createTeamMutate.mockImplementation(async (payload: { name: string }) => {
+      const created = makeTeam({ id: 77, name: "Team Alpha" });
+      mockedTeams.mockReturnValue(
+        queryResult({ isLoading: false, data: [...teamsData, created] }),
+      );
+      return { id: 77, ...payload };
+    });
+    renderWithProviders(<CompetitorFormPage />);
+
+    fireEvent.change(screen.getByLabelText("Tipo"), {
+      target: { value: "TEAM" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo" }));
+    fireEvent.change(screen.getByLabelText("Nombre del equipo"), {
+      target: { value: "Team Alpha" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear" }));
+
+    await waitFor(() =>
+      expect(createTeamMutate).toHaveBeenCalledWith({ name: "Team Alpha" }),
+    );
+    await waitFor(() => {
+      const teamSelect = screen.getByLabelText("Equipo") as HTMLSelectElement;
+      expect(teamSelect.value).toBe("77");
+    });
+    expect(screen.getByRole("option", { name: "Team Alpha" })).toBeDefined();
+  });
+
+  it("shows inline validation errors without creating when fields are missing", async () => {
+    renderWithProviders(<CompetitorFormPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear" }));
+
+    expect(await screen.findByText("Nombre es obligatorio")).toBeDefined();
+    expect(screen.getByText("Apellido es obligatorio")).toBeDefined();
+    expect(createAthleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline create error and keeps the panel open", async () => {
+    createAthleteMutate.mockRejectedValue(new Error("boom"));
+    renderWithProviders(<CompetitorFormPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo" }));
+    fireEvent.change(screen.getByLabelText("Nombre"), {
+      target: { value: "Sofía" },
+    });
+    fireEvent.change(screen.getByLabelText("Apellido"), {
+      target: { value: "Ruiz" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear" }));
+
+    expect(
+      await screen.findByText("No se pudo crear atleta. Intenta de nuevo."),
+    ).toBeDefined();
+
+    const athleteSelect = screen.getByLabelText("Atleta") as HTMLSelectElement;
+    expect(athleteSelect.value).toBe("");
+    expect(screen.queryByText("Crear atleta al instante")).toBeDefined();
+  });
+
+  it("closes the inline panel when switching competitor type", async () => {
+    renderWithProviders(<CompetitorFormPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo" }));
+    expect(screen.getByText("Crear atleta al instante")).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Tipo"), {
+      target: { value: "TEAM" },
+    });
+
+    expect(screen.queryByText("Crear atleta al instante")).toBeNull();
+    expect(screen.queryByText("Crear equipo al instante")).toBeNull();
   });
 });

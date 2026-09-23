@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { useAdminAffiliations, useDeleteAffiliation } from "@/hooks/useAdminModules";
@@ -7,6 +7,7 @@ import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
+import { filterByName, sortByName, type SortDir } from "@/utils/sortFilter";
 
 export default function AffiliationsPage() {
   const navigate = useNavigate();
@@ -15,6 +16,18 @@ export default function AffiliationsPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSuperUser = Boolean(useAuthStore((s) => s.user?.is_superuser));
+  const [search, setSearch] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const affiliations = useMemo(
+    () =>
+      sortByName(
+        filterByName(affiliationsQuery.data ?? [], search, (a) => a.name),
+        sortDir,
+        (a) => a.name,
+      ),
+    [affiliationsQuery.data, search, sortDir],
+  );
 
   const handleDelete = (id: number, name: string) => {
     if (!window.confirm(`¿Eliminar la filiación "${name}"? Esta acción no se puede deshacer.`)) {
@@ -58,22 +71,30 @@ export default function AffiliationsPage() {
     );
   }
 
-  const affiliations = affiliationsQuery.data ?? [];
-
   return (
     <div className="flex flex-col gap-6">
       <PageBreadcrumb pageTitle="Filiaciones" />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-500">
           Catálogo de filiaciones (boxes/gimnasios) que organizan o participan en las competiciones.
         </p>
-        <button
-          onClick={() => navigate("/admin/affiliations/new")}
-          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
-        >
-          Nueva filiación
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre…"
+            aria-label="Buscar por nombre"
+            className="w-full max-w-xs rounded-lg border border-gray-200 bg-transparent px-4 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-300 focus:ring-1 focus:ring-brand-200 sm:w-auto"
+          />
+          <button
+            onClick={() => navigate("/admin/affiliations/new")}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
+          >
+            Nueva filiación
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -85,7 +106,12 @@ export default function AffiliationsPage() {
         </div>
       )}
 
-      {affiliations.length === 0 ? (
+      {affiliations.length === 0 && search ? (
+        <EmptyState
+          title="Sin coincidencias"
+          description="No se encontraron filiaciones que coincidan con la búsqueda."
+        />
+      ) : affiliations.length === 0 ? (
         <EmptyState
           title="Sin filiaciones"
           description="Creá la primera filiación para poder asignarla a una competición."
@@ -96,8 +122,17 @@ export default function AffiliationsPage() {
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
-                    Nombre
+                  <th
+                    onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                    aria-sort={sortDir === "asc" ? "ascending" : "descending"}
+                    className="cursor-pointer select-none px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Nombre
+                      <span className="text-gray-400" aria-hidden="true">
+                        {sortDir === "asc" ? "▲" : "▼"}
+                      </span>
+                    </span>
                   </th>
                   <th className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs uppercase">
                     Ciudad

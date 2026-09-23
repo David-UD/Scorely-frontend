@@ -100,11 +100,11 @@ Panel admin (requieren JWT + rol, bajo <RoleGuard>) — sobre layout TailAdmin:
 **Reglas de convenciones** (verificar en el código, no asumir):
 - Respetar el estilo visual de TailAdmin React (Tailwind v4, layouts de `src/components` y `src/pages`) pero como **código propio** en nuestro proyecto.
 - Componentes del panel admin: replicar el estilo de TailAdmin en componentes propios antes de crear diseños nuevos.
-- `[COMPLETAR: convención de nombres de componentes/archivos, p.ej.: PascalCase, kebab-case]`
-- `[COMPLETAR: patrón de carpetas y exports (default vs named)]`
-- `[COMPLETAR: cómo se manejan los estilos: tema, tokens, dark mode]`
-- `[COMPLETAR: manejo de errores y estados de carga estándar de la app]`
-- `[COMPLETAR: internacionalización (i18n) sí/no y cómo]`
+- Convención de nombres: archivos de componentes y páginas en **PascalCase** (`TeamsPage.tsx`, `CompetitionCard.tsx`); hooks, api y utils en **camelCase** (`useAdminModules.ts`, `categoryCounts.ts`, `sortFilter.ts`); rutas en kebab-case (`/admin/competition-categories`).
+- Patrón de carpetas/exports: estructura de §Arquitectura tal cual existe (`components/{common,public,admin}`, `pages/{admin,public,auth}`, `api`, `hooks`, `utils`, `types`, `store`; `features/` no se usa — los módulos viven en `pages/` + `api/` + `hooks/`); **default export** en páginas y componentes, **named exports** en hooks, api, utils, types y fixtures de tests.
+- Estilos: Tailwind CSS v4 con tokens del tema TailAdmin en `src/styles/index.css` (`@theme`); **solo tema claro** (sin dark mode, decisión de la Parte II); clases utilitarias inline; helper `cn()` (`clsx` + `tailwind-merge`) en `src/utils/cn.ts`.
+- Manejo de errores y estados de carga: `ApiError` (tipado del cliente `src/api/client.ts`) → banner `role="alert"` en formularios/páginas; queries → `Spinner` / `ErrorState` (con Reintentar) / `EmptyState`; borrados con `window.confirm` + banner de error si falla.
+- Internacionalización (i18n): **No** — textos en español hardcodeados, sin librería i18n; fechas con `format`/`Intl` es-ES (`src/utils/format.ts`).
 
 ## API backend (SPA separada: CORS + JWT)
 
@@ -117,15 +117,15 @@ Panel admin (requieren JWT + rol, bajo <RoleGuard>) — sobre layout TailAdmin:
 
 **Reglas:** definir todos los endpoints que la actualización necesita en la Parte II (sección 7). No inventar endpoints: si falta alguno en el backend, **avisar** al usuario en lugar de mockear silenciosamente (o documentar el mock como temporal).
 
-## Entorno / comandos de verificación (`[COMPLETAR]`)
+## Entorno / comandos de verificación
 
 ```bash
-[COMPLETAR install]: # p.ej. npm install / pnpm install
-[COMPLETAR dev]:     # p.ej. npm run dev
-[COMPLETAR build]:   # p.ej. npm run build
-[COMPLETAR lint]:    # p.ej. npm run lint
-[COMPLETAR test]:    # p.ej. npm run test
-[COMPLETAR typecheck]: # p.ej. npx tsc --noEmit
+[install]:    npm install
+[dev]:        npm run dev
+[build]:      npm run build
+[lint]:       npm run lint
+[test]:       npm run test
+[typecheck]:  npm run typecheck
 ```
 
 > Sugeridos con el stack elegido: `npm run dev` (dev de TailAdmin React/Vite), `npm run build` (Vite + `tsc --noEmit`), `npm run test` (Vitest), `npm run lint` (ESLint). Ajustar scripts una vez creado el proyecto.
@@ -496,6 +496,10 @@ Catálogos auxiliares ya cableados en el admin (para armar selects/nombres): `/a
 - **Unicidad del número de inscripción**: no existe constraint; si se requiere "1 número por competición", es cambio backend.
 - **Relación con Parte II-E**: la inscripción es la fuente del recuento público "Categorías e inscritos".
 
+---
+
+# Parte II — Vista pública: pantalla pública con información del sistema
+
 ## 1. Título
 
 Pantalla publica con informacion del sistema, inicio muestra las competencias recientes, con pestaña a todas las competencias, dentro de la competenicia informacion general, mapa, nombre, afiliaod creador, fecha, el leaderborad, los wods, etc.
@@ -521,8 +525,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 
 ## 4. Diseño UI/UX
 
-- `[COMPLETAR wireframe/maqueta o referencia (URL o imagen del diseño)]`
-- Variable: `[COMPLETAR responsive: móvil / tablet / desktop]`
+- Wireframe/maqueta: sin maqueta externa; se replica el estilo TailAdmin a medida con Tailwind (referencia visual: clon `free-react-tailwind-admin-dashboard/`, solo lectura).
+- Responsive: mobile-first; breakpoints Tailwind (`sm`/`md`/`lg`); tablas con scroll horizontal en móvil.
 - Densidad: tarjetas para el listado de competiciones; tablas para WODs y leaderboards.
 - Estados de la interfaz: carga, error, **vacío** (competición sin WODs/leaderboard o sin datos), sin sesión.
 - Interacciones: pestañas (Recientes / Todas), filtros de leaderboard, navegación tarjeta → detalle, mapa embebido.
@@ -537,7 +541,7 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 - Inicio: competencias recientes ordenadas por fecha de inicio (desc) + pestaña "todas".
 - El inicio **siempre muestra todas las competiciones publicadas**, inicie sesión o no (las vistas públicas no adjuntan el token JWT).
 - `/admin/events` y `/admin/teams` cargan los datos de la competición asignada; si no hay selección previa, se auto-selecciona la primera competición disponible.
-- `[COMPLETAR …]`
+- Los cierres de las reglas de negocio están en las secciones correspondientes (II-B…II-H) y en `RESULTADOS.md`.
 
 ## 6. Datos / DTOs
 
@@ -548,8 +552,8 @@ Poner a disposición del público (atletas/espectadores) la información de las 
   - `event_results[]`: **objetos por WOD** (`event_id`, `event_number`, `event_name`, `phase`, `result`, `event_rank`, `score`). `result` es el tiempo (ej. `"03:20"`) o reps (ej. `"150"`); `event_rank`/`score` pueden ser `null` (fase sin dato). `event_ranks`/`event_scores` ya existen en el payload.
 - Leaderboard unificado: por categoría, entradas combinadas con referencias `qualifier`/`final` y `total_score = puntos qualifier + puntos final` (modelo aditivo).
 - `WODs` (Eventos oficiales): `id`, `competition`, `phase` (`QUALIFIER`/`FINAL`), `event_number`, `name`, `workout`, `description`, `is_ascending`, `is_active`. **No existe `competition_stage`** (el modelo fue eliminado; los eventos cuelgan directo de `competition` + `phase`).
-- Nota: el API referencia competiciones por **`id`** (los leaderboards usan `competition_id`); el `slug` existe en el modelo pero no es lookup del API.
-- `[COMPLETAR transformaciones/mocks de prueba]`
+- Nota: el API referencia competiciones por **`id`** (los leaderboards usan `competition_id`); el `slug` existe en el modelo pero el backend resuelve slug e id en `GET /competitions/{slug|id}/`.
+- Transformaciones/mocks: **sin mocks en producción**; fixtures de test en `tests/fixtures.ts` (Vitest), p. ej. `makeCompetition`, `makeLeaderboard`, `makeEventResult`.
 
 ## 7. Endpoints del API utilizados
 
@@ -578,12 +582,12 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 
 | Acción | Método | URL | Auth | Notas |
 |--------|--------|-----|------|-------|
-| Crear equipo | POST | `/api/v1/teams/` | JWT | Payload: `{ name: string, competition: number }` |
-| Actualizar equipo | PATCH | `/api/v1/teams/{id}/` | JWT | `{ name?: string }` |
+| Crear equipo | POST | `/api/v1/teams/` | JWT | Payload global (sin `competition`, Parte II-G): `{ name: string, affiliation?: number }` |
+| Actualizar equipo | PATCH | `/api/v1/teams/{id}/` | JWT | `{ name?: string, affiliation?: number }` |
 | Eliminar equipo | DELETE | `/api/v1/teams/{id}/` | JWT | — |
 | Obtener equipo | GET | `/api/v1/teams/{id}/` | JWT | — |
 
-> Un equipo se asocia directamente a una **competición** por su `id` (`competition`).
+> Desde la **Parte II-G** los equipos son un **catálogo global** (espejo de atletas): no pertenecen a una competición (`Team.competition` fue eliminada); la competición de una inscripción queda representada solo en `Competitor`.
 
 ### Catálogos
 
@@ -604,13 +608,14 @@ Poner a disposición del público (atletas/espectadores) la información de las 
   - **Medallas por WOD (SVG propio, sin emojis):** en cada celda de WOD del ganador del evento (top-3 del `event_rank`) se muestra un icono de medalla **oro / plata / bronce** junto al puntaje (`MedalIcon` con colores `#F6C14E`/`#D7DCE2`/`#E0A36A`). Son SVGs propios gratuitos, no emojis ni librerías externas.
 - `api/`: cliente HTTP con endpoints de lectura pública y base URL por entorno (`VITE_API_URL`).
 - Panel `/admin`: no cambia en esta iteración (queda protegido con `RoleGuard`).
-- `[COMPLETAR hooks/stores/utils adicionales]`
+- Pos. / Atleta / Score N qual/final / Total **ordenables** (asc/desc) en cliente desde la Parte II-H.
+- Hook/stores/utils existentes: `useCompetitions`, `useCompetition`, `useEvents`, `useLeaderboards`/`useLeaderboard`, `useEnabledCompetitionCategories`, `useCompetitors`, `useCompetitionCategories`; stores `authStore` (Zustand persist) y `adminScopeStore`; `src/utils/`: `cn`, `format`, `categoryCounts`, `leaderboard`, `sortFilter`.
 
 ## 9. Cambios en documentación
 
 - `Process.md`: registrar avances.
 - `RESULTADOS.md`: registrar el resultado y las verificaciones.
-- `[COMPLETAR otra documentación: README, changelog…]`
+- `PLAN.md`: documento de planificación (estado y pasos) — se actualiza al cerrar cada parte.
 
 ## 10. Pruebas requeridas
 
@@ -631,9 +636,9 @@ Poner a disposición del público (atletas/espectadores) la información de las 
 
 Checklist verificable al terminar:
 
-- `[COMPLETAR comando build]` sin errores
-- `[COMPLETAR comando lint]` sin errores
-- `[COMPLETAR comando typecheck]` sin errores
+- `npm run build` sin errores
+- `npm run lint` sin errores
+- `npm run typecheck` sin errores
 - Suite de tests en verde
 - `/` consultable **sin login** muestra competiciones (recientes + todas).
 - Detalle muestra información general, afiliación (dueño/creador), fechas, mapa, WODs y leaderboard.
@@ -757,6 +762,101 @@ Ver §2. La UI sigue siendo idioma español, tema claro, patrones TailAdmin.
 - **Competidor sigue sin guard por competición** (`CompetitorViewSet`):
   el aviso de la Parte II-F sigue vigente; `TeamViewSet` ya no sirve como patrón
   de referencia de guard.
+
+---
+
+# Parte II-H — Filtros de búsqueda y ordenamiento (admin + leaderboard)
+
+## 1. Título
+
+Filtros de **búsqueda por nombre** y **ordenamiento asc/desc** en las tablas del panel admin (**Competiciones, Filiaciones, Sedes, Atletas y Equipos**) y **ordenamiento** (sin búsqueda) en el **leaderboard público** (`CombinedLeaderboardTable`).
+
+## 2. Objetivo
+
+- **Admin (5 tablas)**: poder **buscar por nombre** y **ordenar por la columna Nombre** (asc/desc al clickear el header) en:
+  - `/admin/competitions` → `CompetitionsPage`
+  - `/admin/affiliations` → `AffiliationsPage`
+  - `/admin/sedes` → `LocationsPage`
+  - `/admin/athletes` → `AthletesPage`
+  - `/admin/teams` → `TeamsPage`
+- **Leaderboard público**: en `CombinedLeaderboardTable` (detalle de competición), **todas las columnas son ordenables** al clickear su header — `Pos.`, `Atleta`, cada columna `Score N` de Qualifier/Final y `Total` — asc/desc. **Sin búsqueda de texto.**
+- **Todo en cliente**: filtrar/ordenar el array ya cargado (los listados admin usan `page_size=100`). **Sin cambios de backend** (no se envían `search`/`ordering` como query params).
+
+## 3. Alcance
+
+**Incluye:**
+- Input de búsqueda (placeholder p. ej. "Buscar por nombre…") sobre la tabla en las 5 páginas admin; filtra **case-insensitive** y sin acentos (normalizar con `String.prototype.normalize("NFD")` + quitar diacríticos, o `localeCompare` con `sensitivity: "base"`), sobre:
+  - `Competition.name`
+  - `Affiliation.name`
+  - `Location.name`
+  - `Athlete`: `first_name` + `last_name` (concatenados)
+  - `Team.name`
+- Ordenamiento **solo de la columna nombre** en esas 5 tablas: clic en el header alterna **asc → desc**; indicador visual (flecha ▲/▼ o caret, estilo TailAdmin); orden alfabético `localeCompare("es")`.
+- **Default**: orden por nombre asc en las 5 tablas admin (donde hoy no hay otro orden activo; `TeamsPage` ya ordena por nombre — se conserva y pasa a ser controlado por el estado de orden).
+- Búsqueda vacía → lista completa; sin resultados → `EmptyState` de "sin coincidencias" (o el `EmptyState` existente adaptado), sin romper la página.
+- **Leaderboard**: estado de orden por columna (`columnKey` + `direction`) aplicado **después** del filtro de categoría existente (`LeaderboardFilters`); default = orden por defecto actual (`rank`/posición, sin reordenar). Tipos de orden por columna:
+  - `Pos.` → numérico (`rank` / posición en la tabla combinada).
+  - `Atleta` → alfabético (`display_name`, `localeCompare("es")`).
+  - `Score N` / `Total` → numérico; las celdas `-` (sin datos) van **siempre al final** en ambos sentidos.
+- Cada clic en un header alterna asc/desc; clic en una columna distinta la toma como activa (una sola columna ordena a la vez).
+
+**Excluye:**
+- **No** se agrega búsqueda ni orden en `HomeIndex` público ni en `CompetitorsPage`/`CategoriesPage`/`CompetitionCategoriesPage`/`EventsPage` (fuera de este pedido).
+- **No** se toca el backend: no se usan los `search_fields`/`ordering` de DRF; todo es filtrado/orden en el cliente sobre los datos ya cargados.
+- **No** se modifica la lógica de calificación/total del leaderboard (el orden es solo de presentación; `total_score` y `rank` no se recalculan).
+- No tocar la carpeta clon de TailAdmin, no crear ramas ni git.
+
+## 4. Endpoints del API utilizados
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Listados admin (ya existentes) | GET | `/competitions/`, `/affiliations/`, `/locations/`, `/athletes/`, `/teams/` (todos con `page_size=100`) | JWT | Sin cambios: la búsqueda/orden es **en cliente** sobre la respuesta |
+| Leaderboards (ya existentes) | GET | `/api/v1/leaderboards/competition/{id}/qualifier/` y `/final/` | **Pública** | Sin cambios: el orden se aplica en cliente sobre `CombinedLeaderboard` |
+
+> Ningún endpoint nuevo ni parámetro nuevo de query.
+
+## 5. Datos / DTOs
+
+- Sin nuevos DTOs. Trabajamos con los tipos existentes: `Competition`, `Affiliation`, `Location`, `Athlete`, `Team`, `CombinedLeaderboard` / `CombinedLeaderboardEntry`.
+- Estado local (useState o util puro) de las páginas admin: `search: string` y `sortDir: "asc" | "desc"`.
+- Estado local del leaderboard: `sort: { columnKey: string; direction: "asc" | "desc" } | null` (`null` = orden por defecto).
+
+## 6. Cambios en componentes / estructura
+
+- **Helper compartido** (nuevo): `src/utils/sortFilter.ts` (o similar, patrón `utils/leaderboard.ts`):
+  - `normalizeText(value: string): string` — lowercase + sin acentos.
+  - `filterByName<T>(items, query, getName: (item: T) => string): T[]`.
+  - `sortByName<T>(items, dir, getName): T[]` — `localeCompare("es")`.
+  - Reutilizado por las 5 páginas admin (sin duplicar lógica).
+- **Input de búsqueda** en cada una de las 5 páginas admin (sobre la tabla, estilo TailAdmin, junto al botón de alta o arriba de la tabla): `value`/`onChange` en estado local; filtrado antes del render (y después del orden existente de la página).
+- **Header ordenable**: las 5 tablas admin — solo el `<th>` de Nombre recibe `onClick` + indicador de dirección + `aria-sort`.
+- **`CombinedLeaderboardTable.tsx`**: todos los `<th>` ordenables (Pos., Atleta, Score N Qualifier, Score N Final, Total); `onSort(columnKey)` alterna dirección; las filas se reordenan en cliente respetando el filtro de categoría vigente; celdas `-` al final.
+- `CompetitionDetail.tsx`: sin cambios de datos; solo fluye el estado de orden dentro de `CombinedLeaderboardTable` (estado puede vivir dentro del propio componente).
+- Tests (ver §7).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Búsqueda admin | Escribir en el input de `/admin/competitions` | Solo quedan filas cuyo nombre coincide (case-insensitive/sin acentos) |
+| Búsqueda vacía/sin coincidencias | Query vacío / query sin match | Lista completa / `EmptyState` de sin coincidencias |
+| Búsqueda atletas | Buscar por apellido en `/admin/athletes` | Filtra sobre `first_name + last_name` |
+| Orden admin | Clic en header "Nombre" | Alterna asc ↔ desc con `localeCompare("es")`; indicador visible |
+| Orden default | Render inicial de las 5 tablas | Nombre asc |
+| Orden leaderboard numérico | Clic en "Pos." y en "Total" | Filas reordenadas numéricamente asc/desc |
+| Orden leaderboard alfabético | Clic en "Atleta" | Orden alfabético es |
+| Leaderboard `-` al final | Ordenar Score N con celdas sin datos | Las filas `-` quedan al final en ambos sentidos |
+| Filtro categoría + orden | Cambiar categoría y luego ordenar | El orden se aplica dentro de la categoría filtrada |
+| Sin regresiones | Suite completa | Todo en verde |
+
+## 8. Observaciones / riesgos
+
+- **Cliente sobre `page_size=100`**: si un listado supera 100 registros, la búsqueda/orden solo alcanza lo cargado. Si en el futuro hace falta, migrar a `?search=`/`?ordering=` del backend (los viewsets ya declaran `search_fields` en su mayoría) — **fuera de esta iteración**.
+- **Acentos y mayúsculas**: normalizar antes de comparar para que "felipe" encuentre "Felipe" y "sede" encuentre "Sedé" si aplicara; cubrirlo con tests.
+- **Perfomance**: listados ≤ 100 filas → filtrar/ordenar en cada render es despreciable; no hace falta `useMemo` obligatorio, pero se puede usar si conviene.
+- **Leaderboard**: el orden es **solo visual**; no altera `rank`, `total_score` ni la clasificación oficial. Reordenar no debe romper las medallas por WOD ni el resaltado top-3 (la celda conserva sus datos; solo cambia el orden de las filas).
+- **Accesibilidad**: headers ordenables con `aria-sort` y cursor pointer; el input de búsqueda con `<label>` o `aria-label`.
+- **Consistencia visual**: replicar el estilo de input/header de TailAdmin (código propio), no引入 librerías nuevas de tablas.
 
 ---
 

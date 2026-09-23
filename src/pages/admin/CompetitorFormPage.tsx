@@ -11,11 +11,14 @@ import {
   useAdminCompetitionCategories,
   useAdminEnabledCategories,
   useAdminTeams,
+  useCreateAthlete,
   useCreateCompetitor,
+  useCreateTeam,
   useUpdateCompetitor,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
+import InlineEntitySelect from "@/components/admin/InlineEntitySelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -79,6 +82,8 @@ export default function CompetitorFormPage() {
   const teamsQuery = useAdminTeams();
   const enabledQuery = useAdminEnabledCategories(effectiveCompetitionId);
   const categoriesQuery = useAdminCompetitionCategories();
+  const createAthleteMutation = useCreateAthlete();
+  const createTeamMutation = useCreateTeam();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +91,7 @@ export default function CompetitorFormPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { errors },
   } = useForm<CompetitorFormValues>({
@@ -100,6 +106,8 @@ export default function CompetitorFormPage() {
   });
 
   const competitorType = watch("competitor_type");
+  const watchedAthlete = watch("athlete");
+  const watchedTeam = watch("team");
 
   const categoryNames = useMemo(() => {
     const map = new Map<number, string>();
@@ -243,13 +251,15 @@ export default function CompetitorFormPage() {
                 {competitorType === "INDIVIDUAL" ? "Atleta" : "Equipo"}
               </label>
               {competitorType === "INDIVIDUAL" ? (
-                <select
-                  id="athlete"
-                  {...register("athlete")}
-                  className={inputClassName}
-                >
-                  <option value="">Seleccioná un atleta…</option>
-                  {(athletesQuery.data ?? [])
+                <InlineEntitySelect
+                  key={competitorType}
+                  label="Atleta"
+                  placeholder="Seleccioná un atleta…"
+                  selectId="athlete"
+                  value={watchedAthlete}
+                  register={register("athlete")}
+                  selectError={errors.athlete?.message}
+                  options={(athletesQuery.data ?? [])
                     .slice()
                     .sort((a, b) =>
                       `${a.first_name} ${a.last_name}`.localeCompare(
@@ -257,35 +267,59 @@ export default function CompetitorFormPage() {
                         "es",
                       ),
                     )
-                    .map((athlete) => (
-                      <option key={athlete.id} value={athlete.id}>
-                        {athlete.first_name} {athlete.last_name}
-                      </option>
-                    ))}
-                </select>
+                    .map((athlete) => ({
+                      value: String(athlete.id),
+                      label: `${athlete.first_name} ${athlete.last_name}`,
+                    }))}
+                  fields={[
+                    { name: "first_name", label: "Nombre", required: true },
+                    { name: "last_name", label: "Apellido", required: true },
+                    { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
+                    {
+                      name: "gender",
+                      label: "Sexo",
+                      type: "select",
+                      required: true,
+                      options: [
+                        { value: "M", label: "Masculino" },
+                        { value: "F", label: "Femenino" },
+                      ],
+                    },
+                  ]}
+                  onCreate={async (values) =>
+                    createAthleteMutation.mutateAsync({
+                      first_name: values.first_name,
+                      last_name: values.last_name,
+                      birth_date: values.birth_date || undefined,
+                      gender: values.gender || "",
+                    })
+                  }
+                  onSelectCreated={(id) => setValue("athlete", String(id))}
+                />
               ) : (
-                <select
-                  id="team"
-                  {...register("team")}
-                  className={inputClassName}
-                >
-                  <option value="">Seleccioná un equipo…</option>
-                  {(teamsQuery.data ?? [])
+                <InlineEntitySelect
+                  key={competitorType}
+                  label="Equipo"
+                  placeholder="Seleccioná un equipo…"
+                  selectId="team"
+                  value={watchedTeam}
+                  register={register("team")}
+                  selectError={errors.team?.message}
+                  options={(teamsQuery.data ?? [])
                     .slice()
                     .sort((a, b) => a.name.localeCompare(b.name, "es"))
-                    .map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-              {(competitorType === "INDIVIDUAL" ? errors.athlete : errors.team)
-                ?.message && (
-                <p className="mt-1 text-xs text-error-600" role="alert">
-                  {(competitorType === "INDIVIDUAL" ? errors.athlete : errors.team)
-                    ?.message}
-                </p>
+                    .map((team) => ({
+                      value: String(team.id),
+                      label: team.name,
+                    }))}
+                  fields={[
+                    { name: "name", label: "Nombre del equipo", required: true },
+                  ]}
+                  onCreate={async (values) =>
+                    createTeamMutation.mutateAsync({ name: values.name })
+                  }
+                  onSelectCreated={(id) => setValue("team", String(id))}
+                />
               )}
             </div>
 

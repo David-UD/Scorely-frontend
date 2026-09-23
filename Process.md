@@ -428,3 +428,223 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
 2. **`registration_number` sin unicidad** (`blank=True`): la UI lo exige; si se quiere único por competición es `UniqueConstraint` en backend.
 3. **Borrado en uso**: FK `enabled_competition_category` `PROTECT` + `Competitor` en resultados → `DELETE` puede fallar; la UI muestra el banner.
 4. Relación con **Parte II-E**: cada inscripción incrementa el recuento público "Categorías e inscritos".
+
+---
+
+## Paso 30 — Parte II-G — Equipos globales (cierre documental) (COMPLETADO)
+
+> Cierre de la iteración 2026-09-22 (código ya implementado y verificado en backend y frontend). Se documenta en `Process.md` el estado final: alcance, cambios y avisos, más el test pendiente de `TeamsPage` que se cubrió en el Paso 31 (II-H).
+
+### Alcance
+- `Team.competition` (FK) **eliminada** → catálogo global de equipos (estilo Atletas), sin selección por competición.
+- Backend `leader\Scorely`: `TeamSerializer.fields = (id, name, affiliation)`; `TeamViewSet` espejo de `AthleteViewSet` con `(IsAuthenticated,)`; `TeamAdmin` sin `competition`; migración `participants/0003_remove_team_competition`; `seed_data.create_team()` global.
+- Frontend: `Team`/`TeamWritePayload` sin `competition`; `fetchTeams()` global `/teams/?page_size=100`; `useAdminTeams()` sin scope; `TeamsPage` sin `CompetitionScopeSelect` ni columna Competición; `TeamFormPage` solo `name`; select de equipos en `CompetitorFormPage` trae todos los equipos; categorías habilitadas siguen por competición.
+- **`tests/TeamsPage.test.tsx`** (8): lista global sin columna Competición ni `CompetitionScopeSelect`, vacío, eliminar con confirm, error de borrado (`role="alert"`), filtro por nombre (case/accentos), sin coincidencias, orden asc/desc por header "Equipo".
+
+### Verificación
+- `npm run test` → **112/112** en verde (16 archivos) al cierre de II-G; con II-H la suite quedaría en 143 (ver Paso 31).
+- `npm run typecheck` → OK · `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+
+### Avisos backend (sin tocar backend)
+1. **Escritura de catálogos sin `IsSuperAdmin`**: `AffiliationViewSet`, `LocationViewSet`, `CompetitionCategoryViewSet` permiten escritura a cualquier autenticado (el "solo superadmin" es solo frontend). Existe `apps/users/permissions.py:19` (`IsSuperAdmin`) para aplicarlo si se quiere regla real.
+2. **`CompetitorViewSet` sin guard de competición/rol** (II-F/II-G): `TeamViewSet` ya no es patrón de inscripción (es catálogo global); la seguridad real de inscripciones sigue pendiente en backend.
+
+---
+
+## Paso 31 — Parte II-H — Filtros de búsqueda y ordenamiento (cierre) (COMPLETADO)
+
+> Ejecución del `PLAN.md` (Pasos 4–10, 12): filtro por nombre y orden ascendente/descendente de la columna Nombre en las **5 tablas admin**, y todos los headers del **leaderboard público** ordenables. Implementación 100 % en cliente (sin `?search=`/`?ordering=`); el backend no se toca.
+
+### Requerimiento
+- **Admin**: `Competitions`, `Affiliations`, `Sedes (Locations)`, `Atletas` y `Equipos` con input de búsqueda (por nombre; en atletas `first_name + last_name`) y header de la columna Nombre/Atleta/Equipo ordenable (asc por defecto, alternar asc/desc). Search case-insensitive y sin acentos; con filtro activo y sin resultados → `EmptyState` "Sin coincidencias".
+- **Leaderboard público** (`CombinedLeaderboardTable`): todos los headers ordenables (`Pos.`, `Atleta`, `Score N` qualifier/final, `Total`); sin búsqueda; estado de orden interno con default `null` = orden original del backend; celdas sin dato (`-`) siempre al final en ambos sentidos; el orden es **solo visual** (no recalcula `rank`/`total_score`/medallas); se aplica después del filtro de categoría existente.
+
+### Cambios aplicados
+- **`PROMPT.md`**: nueva sección **Parte II-H** (spec: alcance, §7 pruebas, avisos 100 % cliente). Además se cerraron `[COMPLETAR]` de la Parte I (convenciones + comandos `npm run …`) y de la Parte II pública (wireframe/responsive/mocks/hooks/docs/§11) y se restauró el encabezado `# Parte II — Vista pública…`.
+- **`src/utils/sortFilter.ts`** (nuevo): `normalizeText` (NFD sin diacríticos), `filterByName`, `sortByName` (localeCompare "es"), `SortDir`.
+- **Páginas admin** (Competitions, Affiliations, Locations, Athletes, Teams): `search`/`sortDir` en estado, `useMemo` antes de cualquier early-return (regla hooks), input `type="search"` con `aria-label`, `<th>` con `onClick`/`aria-sort`/indicador ▲▼, `EmptyState` "Sin coincidencias". Se reemplazó el orden inline que ya traían `TeamsPage`/`AthletesPage`.
+- **`src/components/public/CombinedLeaderboardTable.tsx`**: estado `{key, dir} | null`; `sortedEntries` derivado (numérico para Pos./Total, `localeCompare("es")` para Atleta, score de cada WOD por id); celdas `-` al final; `rowSpan` de Pos./Atleta/Total conservado.
+- **Tests**: `sortFilter.test.ts` (6), `AthletesPage.test.tsx` (5), `CombinedLeaderboardTable.test.tsx` (5), casos añadidos a `CompetitionsPage.test.tsx` (+3), `AffiliationsPage.test.tsx` (+2), `LocationsPage.test.tsx` (+2); `TeamsPage.test.tsx` (8) incluye búsqueda/orden.
+
+### Tests (112 → **143**)
+- 20 archivos · **143/143** en verde.
+
+### Verificación
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run typecheck` → OK.
+- `npm run test` → **143/143** (20 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Verificación backend (Paso 14 del PLAN; solo comandos de prueba, sin migrate/seed)
+- `python manage.py check` → *System check identified no issues (0 silenced)*.
+- `python manage.py makemigrations --check --dry-run` → *No changes detected*.
+- `python -m pytest tests` → **119 passed** (pytest.ini: `DJANGO_SETTINGS_MODULE=config.settings.development`, `--nomigrations`).
+- **Lectura pública (II-E) confirmada en vivo** (GET sin token): `competitors/?competition=8` → 200 (2), `enabled-competition-categories/?competition=8` → 200, `competition-categories/?page_size=100` → 200, `leaderboards/competition/8/qualifier/` → 200. `teams/?page_size=100` → 401 sin token (esperado: catálogo de solo autenticados).
+
+### Avisos (II-H es 100 % cliente)
+1. Los listados usan `page_size=100`; si un catálogo supera 100 registros, búsqueda/orden solo alcanzan lo cargado (los viewsets ya declaran `search_fields`; no se usan).
+2. El orden del leaderboard es solo visual: NO recalcula `rank`/`total_score`; no-finalistas (`-`) al final.
+3. Verificación manual contra backend real (+ escenarios del `PLAN.md` Pasos 13/15) → **pendiente del usuario**.
+
+---
+
+## Paso 32 — Creación inline de atleta/equipo en el formulario de competidor (cierre) (COMPLETADO)
+
+> Ejecución del `PLAN.md` (mejora de UX, 2026-09-23): desde
+> `CompetitorFormPage` se crean **atleta** (Individual) y **equipo** (Equipo)
+> sin salir del formulario; el registro creado queda seleccionado en su
+> `<select>` automáticamente. Sin cambios de backend (se reutilizan
+> `POST /athletes/` y `POST /teams/`, que ya responden el recurso con `id`).
+
+### Requerimiento (decisiones del usuario)
+- Creación inline para **atleta y equipo** (botón "+ Nuevo" solo cuando el tipo
+  sea el correspondiente; disponible en creación y edición).
+- `AthletesPage`/`TeamsPage` se mantienen **globales** (Parte II-G); no scope.
+- `page_size=100` sin cambios; sin búsqueda server-side en los selects.
+- Mini-form atleta = Nombre, Apellido, Fecha de nacimiento, Sexo (igual a
+  `AthleteFormPage`); mini-form equipo = solo Nombre.
+
+### Cambios aplicados
+- **`src/components/admin/InlineEntitySelect.tsx`** (nuevo): `<select>` +
+  "+ Nuevo" + panel inline colapsable con mini `useForm`/`zodResolver` derivado
+  de `fields: InlineFieldConfig[]`. Sin `<form>` anidado (botones
+  `type="button"`) para no interceptar el submit del formulario padre; errores
+  de validación y de creación inline con `role="alert"`; los `fields` con
+  `type: "select"` inician con la primera opción por defecto; `selectId` para
+  asociar el `<label>` del form padre; `value` controlado desde el padre
+  (`watch`) para que la selección persista cuando aparece la opción nueva.
+  `key={competitorType}` en cada instancia para reiniciar el panel al alternar
+  Individual/Equipo.
+- **`src/pages/admin/CompetitorFormPage.tsx`**: se reemplazan los `<select>` de
+  Atleta/Equipo (líneas 245-282) por dos instancias condicionales de
+  `InlineEntitySelect`. `useCreateAthlete()`/`useCreateTeam()` ya existían
+  (invalidan `["admin","athletes"]`/`["admin","teams"]`, por lo que los selects
+  se refrescan tras crear). `onCreate` → `mutateAsync({...})`; `onSelectCreated`
+  → `setValue("athlete"|"team", String(id))`. Atletas ordenados por
+  `first_name + last_name` (es), equipos por `name` (es), como antes.
+- **`tests/CompetitorFormPage.test.tsx`**: se amplía a **11 casos** — mocks de
+  `useCreateAthlete`/`useCreateTeam` y listas dinámicas (arrays reconstruidos en
+  cada `mockImplementation` para simular el refetch tras invalidar): crear
+  atleta inline (payload + selección automática + opción nueva visible), crear
+  equipo inline, validación inline (campos obligatorios, no llama a mutate),
+  error de creación inline que mantiene el panel abierto, y cierre del panel al
+  alternar tipo. Los 6 casos previos siguen en verde.
+
+### Tests (143 → **148**)
+- 20 archivos · **148/148** en verde.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **148/148** (20 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas
+- Backend **sin tocar** (`leader\Scorely`); avisos de seguridad §5 del `PLAN.md`
+  (catálogos sin `IsSuperAdmin`, `CompetitorViewSet` sin guard, sin unicidad en
+  `registration_number`) siguen pendientes (fuera de alcance).
+- La selección automática depende de que la opción creada aparezca en el
+  catálogo; en producción la invalidation de React Query lo garantiza; en los
+  tests se simula devolviendo la lista actualizada tras la creación.
+- Verificación manual (contrar con la UI) → **pendiente del usuario**.
+
+## Paso 33 — Inscripción opcional integrada en el alta de atleta (cierre) (COMPLETADO)
+
+> Ejecución del `PLAN.md` (2026-09-23): en `/admin/athletes/new` (solo modo
+> creación) aparece una sección colapsable **"Inscribir en competición
+> (opcional)"**. Si se usa, al guardar se crea el atleta (`POST /athletes/`) y
+> luego la inscripción Individual (`POST /competitors/`) en la misma acción.
+> Sin cambios de backend; el flujo inline de `CompetitorFormPage` queda intacto.
+
+### Decisiones del usuario
+- **Sumar bloque inline en atleta** (mantener el inline de `CompetitorFormPage`
+  y agregar la sección opcional en el alta de atleta).
+- **Nº de inscripción manual opcional** (el backend acepta vacío, `blank=True`).
+- El bloque **solo en creación** (en `/admin/athletes/:id/edit` no tiene sentido).
+
+### Cambios aplicados
+- **`src/pages/admin/AthleteFormPage.tsx`**:
+  - Hooks agregados: `useAdminCompetitions` (competiciones asignadas al admin),
+    `useAdminEnabledCategories(competitionId)` (categorías habilitadas de la
+    competición electa, etiquetadas por nombre del catálogo vía
+    `useAdminCompetitionCategories`), `useCreateCompetitor(competitionId)`.
+  - Estado local: `inscribeOpen`, `selectedCompetition`, `selectedCategory`,
+    `registrationNumber`, `blockError` y `createdAthleteRef` (conserva el atleta
+    creado ante un fallo posterior de inscripción → un reintento **no** duplica
+    el atleta).
+  - Sección colapsable (`aria-expanded`) tras Fecha de nacimiento/Sexo:
+    selección de competición → categoría (deshabilitada hasta elegir
+    competición, resetea la categoría al cambiar de competición) → nº opcional.
+  - `onSubmit`: validación previa (competición sin categoría → error en el
+    bloque y **no** crea nada); crear atleta; si hay competición+categoría →
+    `createCompetitorMutation` con `INDIVIDUAL`, `athlete: atleta.id`,
+    `team: null`, `registration_number` (trim), `competition`,
+    `enabled_competition_category`; éxito → `/admin/athletes`; fallo de
+    inscripción → "El atleta se guardó, pero la inscripción falló…", sin navegar
+    y conservando los valores.
+  - `saving` incluye también `createCompetitorMutation.isPending`.
+- **`tests/AthleteFormPage.test.tsx`** (**nuevo, 5 casos**): mocks de
+  `useAdminCompetitions`, `useAdminEnabledCategories`,
+  `useAdminCompetitionCategories`, `useCreateCompetitor`, `fetchAthlete`:
+  (a) alta simple sin tocar el bloque → solo crea atleta, no llama al competidor;
+  (b) alta con inscripción → payload de atleta y luego competidor con
+  `athlete = id` del creado, `team: null`, nº trim, competición y categoría;
+  (c) competición sin categoría → error en el bloque y ninguna mutación;
+  (d) fallo de inscripción → atleta creado + mensaje de aviso, reintento retoma
+  la inscripción sin recrear el atleta; (e) bloque ausente en edición y PATCH
+  conservando `id`.
+
+### Tests (148 → **153**)
+- 21 archivos · **153/153** en verde.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **153/153** (21 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas
+- **2 llamadas no transaccionales**: atleta + competidor. Si la inscripción
+  falla tras crear el atleta, la UI informa y permite reintentar solo la
+  inscripción (`createdAthleteRef`), evitando duplicar atletas.
+- Backend **sin tocar** (`leader\Scorely`). `CompetitorViewSet` sigue sin guard
+  de competición/rol (mismo aviso de la Parte II-F, fuera de alcance).
+- Verificación manual (contrar con la UI) → **pendiente del usuario**.
+
+## Paso 34 — Inscripción opcional integrada en el alta de equipo (cierre) (COMPLETADO)
+
+> Extensión del Paso 33 (`PLAN.md` 2026-09-23): el bloque colapsable
+> **"Inscribir en competición (opcional)"** se replica en `/admin/teams/new`
+> (solo modo creación). Al guardar se crea el equipo (`POST /teams/`) y, si se
+> eligió competición + categoría, la inscripción (`POST /competitors/` con
+> `competitor_type: "TEAM"`). Sin cambios de backend.
+
+### Cambios aplicados
+- **`src/pages/admin/TeamFormPage.tsx`**: espejo del bloque de `AthleteFormPage`
+  (Paso 33): sección colapsable (`aria-expanded`) tras "Nombre del equipo" con
+  select de **Competición** (`useAdminCompetitions`), select de **Categoría**
+  dependiente (`useAdminEnabledCategories` + nombres del catálogo) y campo
+  **Nº de inscripción (opcional)**; `createdTeamRef` evita duplicar el equipo si
+  la inscripción falla y se reintenta; payload de competidor `TEAM`
+  (`athlete: null`, `team: equipo.id`); `saving` incluye
+  `createCompetitorMutation.isPending`.
+- **`tests/TeamFormPage.test.tsx`** (**nuevo, 5 casos**): espejo de
+  `AthleteFormPage.test.tsx` — alta simple sin inscribir, alta + inscripción
+  (payload `TEAM` con `team = id` del equipo creado), competición sin categoría
+  (error, nada se crea), fallo de inscripción (aviso + reintento sin recrear el
+  equipo), bloque ausente en edición (PATCH conservando `id`).
+
+### Tests (153 → **158**)
+- 22 archivos · **158/158** en verde.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **158/158** (22 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas
+- Mismas 2 llamadas no transaccionales del Paso 33; el reintento tras fallo de
+  inscripción no duplica el equipo (`createdTeamRef`).
+- Backend **sin tocar** (`leader\Scorely`).
+- Verificación manual (contrar con la UI) → **pendiente del usuario**.

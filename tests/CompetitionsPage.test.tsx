@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
 import { renderWithProviders, queryResult } from "./utils";
 import { makeCompetition } from "./fixtures";
 import CompetitionsPage from "@/pages/admin/CompetitionsPage";
@@ -93,5 +93,59 @@ describe("CompetitionsPage", () => {
     );
     renderWithProviders(<CompetitionsPage />);
     expect(screen.getByText("Sin competiciones")).toBeDefined();
+  });
+
+  it("filters competitions by name (case and accent insensitive)", () => {
+    mockedUseAdminCompetitions.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeCompetition({ id: 1, name: "Águilas Open" }),
+          makeCompetition({ id: 2, name: "Hyrox Barcelona" }),
+        ],
+      }),
+    );
+    renderWithProviders(<CompetitionsPage />);
+    const input = screen.getByRole("searchbox", { name: /buscar/i });
+    fireEvent.change(input, { target: { value: "aguilas" } });
+    expect(screen.getByText("Águilas Open")).toBeDefined();
+    expect(screen.queryByText("Hyrox Barcelona")).toBeNull();
+  });
+
+  it("shows an empty state when the search has no matches", () => {
+    mockedUseAdminCompetitions.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [makeCompetition({ id: 1, name: "TJ Summer Games" })],
+      }),
+    );
+    renderWithProviders(<CompetitionsPage />);
+    const input = screen.getByRole("searchbox", { name: /buscar/i });
+    fireEvent.change(input, { target: { value: "zzz" } });
+    expect(screen.getByText("Sin coincidencias")).toBeDefined();
+  });
+
+  it("sorts by name ascending and descending on header click", () => {
+    mockedUseAdminCompetitions.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeCompetition({ id: 1, name: "Bravo Open" }),
+          makeCompetition({ id: 2, name: "Alpha Games" }),
+        ],
+      }),
+    );
+    renderWithProviders(<CompetitionsPage />);
+    const rows = () =>
+      Array.from(screen.getAllByRole("row")).map((r) => r.textContent);
+    expect(rows().findIndex((r) => r?.startsWith("Alpha"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Bravo")),
+    );
+
+    const header = screen.getByRole("columnheader", { name: /nombre/i });
+    fireEvent.click(header);
+    expect(rows().findIndex((r) => r?.startsWith("Bravo"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Alpha")),
+    );
   });
 });

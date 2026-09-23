@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
 import { renderWithProviders, queryResult } from "./utils";
 import { makeLocation } from "./fixtures";
 import LocationsPage from "@/pages/admin/LocationsPage";
@@ -108,5 +108,46 @@ describe("LocationsPage", () => {
     screen.getByText("Eliminar").click();
     expect(await screen.findByRole("alert")).toBeDefined();
     confirmSpy.mockRestore();
+  });
+
+  it("filters locations by name (case and accent insensitive)", () => {
+    mockedLocations.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeLocation({ id: 1, name: "Arena Olímpica" }),
+          makeLocation({ id: 2, name: "Box Central" }),
+        ],
+      }),
+    );
+    renderWithProviders(<LocationsPage />);
+    const input = screen.getByRole("searchbox", { name: /buscar/i });
+    fireEvent.change(input, { target: { value: "olimpica" } });
+    expect(screen.getByText("Arena Olímpica")).toBeDefined();
+    expect(screen.queryByText("Box Central")).toBeNull();
+  });
+
+  it("sorts by name on header click", () => {
+    mockedLocations.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [
+          makeLocation({ id: 1, name: "Zeta Arena" }),
+          makeLocation({ id: 2, name: "Alpha Box" }),
+        ],
+      }),
+    );
+    renderWithProviders(<LocationsPage />);
+    const rows = () =>
+      Array.from(screen.getAllByRole("row")).map((r) => r.textContent);
+    expect(rows().findIndex((r) => r?.startsWith("Alpha"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Zeta")),
+    );
+
+    const header = screen.getByRole("columnheader", { name: /nombre/i });
+    fireEvent.click(header);
+    expect(rows().findIndex((r) => r?.startsWith("Zeta"))).toBeLessThan(
+      rows().findIndex((r) => r?.startsWith("Alpha")),
+    );
   });
 });
