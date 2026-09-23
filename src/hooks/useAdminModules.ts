@@ -6,6 +6,7 @@ import {
   createCompetitor,
   createEnabledCompetitionCategory,
   createEvent,
+  createEventCompetitor,
   createLocation,
   createTeam,
   deleteAffiliation,
@@ -14,6 +15,7 @@ import {
   deleteCompetitor,
   deleteEnabledCompetitionCategory,
   deleteEvent,
+  deleteEventCompetitor,
   deleteLocation,
   deleteTeam,
   fetchAffiliations,
@@ -22,6 +24,7 @@ import {
   fetchCompetitors,
   fetchEnabledCompetitionCategories,
   fetchEvents,
+  fetchEventCompetitors,
   fetchLocations,
   fetchTeams,
   updateAffiliation,
@@ -30,6 +33,7 @@ import {
   updateCompetitor,
   updateEnabledCompetitionCategory,
   updateEvent,
+  updateEventCompetitorResult,
   updateLocation,
   updateTeam,
 } from "@/api/admin";
@@ -38,6 +42,7 @@ import type {
   CompetitionCategoryWritePayload,
   CompetitorWritePayload,
   EnabledCompetitionCategoryWritePayload,
+  EventCompetitorWritePayload,
   LocationWritePayload,
 } from "@/types";
 
@@ -385,6 +390,73 @@ export function useDeleteCompetitor(competitionId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["admin", "competitors", competitionId],
+      });
+    },
+  });
+}
+
+// ── Results / EventCompetitor (admin scope) ─────────────────────────────────
+
+export function useAdminEventCompetitors(eventId: number | null) {
+  return useQuery({
+    queryKey: ["admin", "event-competitors", eventId],
+    queryFn: () => fetchEventCompetitors(eventId as number),
+    enabled: Boolean(eventId),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateEventCompetitor(
+  eventId: number | null,
+  competitionId: number | null,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: EventCompetitorWritePayload) =>
+      createEventCompetitor(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "event-competitors", eventId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
+      });
+    },
+  });
+}
+
+export function useUpdateEventCompetitor(
+  eventId: number | null,
+  competitionId: number | null,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: number; result: string }) =>
+      updateEventCompetitorResult(args.id, args.result),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "event-competitors", eventId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
+      });
+    },
+  });
+}
+
+export function useDeleteEventCompetitor(
+  eventId: number | null,
+  competitionId: number | null,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteEventCompetitor,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "event-competitors", eventId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
       });
     },
   });

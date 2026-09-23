@@ -858,6 +858,88 @@ Filtros de **búsqueda por nombre** y **ordenamiento asc/desc** en las tablas de
 - **Accesibilidad**: headers ordenables con `aria-sort` y cursor pointer; el input de búsqueda con `<label>` o `aria-label`.
 - **Consistencia visual**: replicar el estilo de input/header de TailAdmin (código propio), no引入 librerías nuevas de tablas.
 
+# Parte II-K — Módulo admin: Resultados (entrada masiva por evento)
+
+## 1. Título
+
+Módulo de administración de **resultados por evento** (`EventCompetitor`) en el panel: en `/admin/scores`, por cada evento (WOD) de la competición en scope, se cargan los resultados (`result`) de los competidores en una **grilla masiva** (una fila por inscrito). El `event_rank`/`score` los calcula el backend y el leaderboard público se actualiza solo.
+
+## 2. Objetivo
+
+- Permitir al **admin de competición** (y al superuser) cargar/editar los `result` de los inscritos de la competición seleccionada para un evento (WOD) dado, en una sola pantalla, con guardado masivo.
+- Cada alta aquí alimenta los leaderboards públicos (qualifier/final): al consultar, el backend recalcula `event_rank`, `score` y el total de cada competidor.
+
+## 3. Alcance
+
+**Incluye:**
+- Página `/admin/scores` con `CompetitionScopeSelect` (competición asignada) + **select de evento** (WODs de la competición, etiqueta `WOD #N — name (Qualifier/Final)`, patrón `useAdminEvents`).
+- **Grilla masiva**: columnas **Nº de inscripción / Competidor (atleta o equipo, tipo) / Categoría / Resultado (input)**. Por fila:
+  - Sin `EventCompetitor` existente → input vacío; al guardar → `POST /event-competitors/`.
+  - Con resultado existente → precarga `result`; al guardar → `PATCH /event-competitors/{id}/` (solo `{result}`).
+  - Si el valor se vacía y el registro existía → `DELETE /event-competitors/{id}/`.
+- Guardado secuencial (N llamadas) con banner `role="alert"` de `ApiError` si falla, conservando los valores cargados para reintentar.
+- Tras guardar: invalidar la query del grid y las del leaderboard público (el recalculo es **on-read**, sin botón de recalcular).
+- Ítem **"Resultados"** habilitado en el sidebar → `/admin/scores` en `manageItems`. **Sin gate superadmin**: lo usan admins de competición sobre sus competiciones asignadas (el scope ya limita; superuser ve todas).
+
+**Excluye / decisiones:**
+- **Scoring** (reglas de puntos por posición, `scoring-rules`, ítem `/admin/scoring`) permanece **"Próximamente"** en el sidebar — fuera de esta iteración.
+- **No se toca el backend**: `EventCompetitorViewSet` usa el permiso global `IsAuthenticated` (no define `permission_classes`) y **no filtra por competición ni valida rol**. La restricción visual queda a nivel frontend (scope). *Nota: quien quiera seguridad real debe añadir `IsCompetitionAdmin` + `visible_competitions_q` y filtrar por `event__competition__in=...`.*
+- **No existe endpoint bulk** en el backend: el guardado masivo se implementa con N requests (POST/PATCH/DELETE por fila).
+- `result` es **texto libre** (tiempo `"03:20"` o reps `"150"`); el parsing lo hace el backend (`ResultParser`). El frontend solo exige no vacío.
+- No se gestionan horarios/heats/jueces.
+
+## 4. Endpoints del API utilizados
+
+> **Shape verificado en el backend** (`leader\Scorely/apps/events`): `EventCompetitor` = `(id, competitor, event, result, event_rank, score)` con constraint único `(competitor, event)` y ordering `['event','event_rank']`; `EventCompetitorSerializer` = `(id, competitor, event, result, event_rank, score)` con `event_rank`/`score` **read_only** (los calcula el backend al leer). `EventCompetitorViewSet` = `ModelViewSet` con `filterset_fields = ('event','competitor')`, sin `permission_classes` → cae en el global `IsAuthenticated`.
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Resultados de un evento | GET | `/api/v1/event-competitors/?event={id}&page_size=100` | JWT | Para precargar la grilla (join por `competitor`) |
+| Cargar resultado | POST | `/api/v1/event-competitors/` | JWT | Payload `{ competitor, event, result }` — no duplicar `(competitor, event)` |
+| Editar resultado | PATCH | `/api/v1/event-competitors/{id}/` | JWT | Parcial, solo `{ result }` |
+| Quitar resultado | DELETE | `/api/v1/event-competitors/{id}/` | JWT | Al vaciar el input de una fila existente |
+
+Catálogos auxiliares ya cableados en el admin: `/competitors/?competition={id}&page_size=100` (filas de la grilla), `/events/?competition={id}&phase=...` (select de evento), `/athletes/?page_size=100` y `/teams/?page_size=100` (nombres), `/enabled-competition-categories/?competition={id}` + `/competition-categories/?page_size=100` (categoría por nombre).
+
+> ⚠️ **Aviso backend (no se toca en esta Parte II-K):** `EventCompetitorViewSet` no filtra por competición ni valida rol → cualquier usuario autenticado puede leer/escribir resultados de cualquier competición. La seguridad real es un cambio backend.
+
+## 5. Datos / DTOs
+
+- `EventCompetitor` (DTO nuevo): `{ id, competitor, event, result, event_rank, score }` (`competitor`/`event` = ids; `event_rank`/`score` informativos, llegan `null` hasta que el leaderboard se calcula).
+- `EventCompetitorWritePayload` (DTO nuevo): `{ id?, competitor, event, result }`.
+- Reutilizados: `Competitor` (con `competitor_type`, `registration_number`, `enabled_competition_category`), `EventWod` (`phase`, `event_number`, `name`), `Athlete`, `Team`, `EnabledCompetitionCategory`/`CompetitionCategory` (nombres de categoría).
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: `EventCompetitor` y `EventCompetitorWritePayload`.
+- `src/api/admin.ts`: `fetchEventCompetitors(eventId)` (`/event-competitors/?event={id}&page_size=100`), `createEventCompetitor(payload)`, `updateEventCompetitor(id, { result })`, `deleteEventCompetitor(id)` — JWT por defecto, patrón Competitors.
+- `src/hooks/useAdminModules.ts`: `useAdminEventCompetitors(eventId)`, `useCreateEventCompetitor`, `useUpdateEventCompetitor`, `useDeleteEventCompetitor` (invalidan `["admin","event-competitors", eventId]` y el leaderboard público `["leaderboard", competitionId]`).
+- `src/pages/admin/ScoresPage.tsx` (nuevo): scope + select de evento + grilla masiva (estado local `results: Record<competitorId, {id?: number; value: string}>`) + botón **Guardar resultados** (secuencial POST/PATCH/DELETE) con banner de error; Spinner/ErrorState/EmptyState por sección.
+- `src/App.tsx`: ruta `/admin/scores`. `src/components/admin/AdminSidebar.tsx`: **"Resultados" → `enabled: true`**, `path: "/admin/scores"`, movido a `manageItems` (queda solo "Scoring" en "Próximamente"). `icons.tsx`: reutilizar `ChartIcon` (ya existe).
+- Tests: fixture `makeEventCompetitor`; bloque en `tests/adminApi.test.ts` (LIST/POST/PATCH/DELETE); `tests/ScoresPage.test.tsx` (nuevo).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| LIST | `/admin/scores` con scope + evento | Grilla con Nº, competidor, tipo, categoría y resultados precargados |
+| Guardar masivo | Filas con valores (nuevos y existentes) | POST para las nuevas, PATCH `{result}` para las existentes |
+| Vaciar resultado | Fila con `EventCompetitor` existente que se limpia | `DELETE /event-competitors/{id}/` |
+| Sin evento | `/admin/scores` sin evento seleccionado | Grilla vacía/inputs deshabilitados, no rompe |
+| Error al guardar | Fallo de una llamada | Banner `role="alert"` con el `ApiError`, inputs conservados |
+| Prevención de duplicado | Fila con resultado existente | Usa PATCH (nunca POST duplicado para `(competitor, event)`) |
+| Sin scope | `/admin/scores` sin competición | Select de evento deshabilitado, botón Guardar deshabilitado |
+| Regresión | Tras guardar | Se invalidan queries; el leaderboard público muestra los nuevos ranks/score (recalculo on-read) |
+
+## 8. Observaciones / riesgos
+
+- **Escrituras sin guard de competición/rol**: `EventCompetitorViewSet` queda en el global `IsAuthenticated`; la restricción es **solo visual** (scope) en frontend. Aviso backend: aplicar `IsCompetitionAdmin` + `visible_competitions_q` y filtrar el queryset por `event__competition` para una regla real.
+- **Constraint único `(competitor, event)`**: clave `unique_competitor_per_event`. El grid debe resolver el id existente por fila (`event_competitors` por `competitor`) y usar PATCH; un POST duplicado responde 4xx.
+- **`event_rank`/`score` read-only**: los calcula el backend al construir el leaderboard (`EventRankingService`/`ResultParser`). No enviarlos en el payload; tras guardar, invalidar el leaderboard para que el recalculo on-read se vea.
+- **Sin endpoint bulk**: el guardado masivo es N requests secuenciales; en competiciones grandes (ej. HYROX con miles de inscritos) evaluar paginación, feedback de progreso o proponer un endpoint bulk al backend (fuera de esta iteración).
+- **Grilla sobre `page_size=100`** (inscritos): si la competición supera 100 inscritos, la grilla solo cubre lo cargado; igual que el resto del admin.
+- **Resultados ≠ Scoring**: "Resultados" (`event-competitors`) carga los datos crudos; "Scoring" (`scoring-rules`, puntos por posición) sigue **"Próximamente"** y determina el `score` de cada puesto. Sin `scoring-rules` cargadas, el score/leaderboard puede no reflejar puntos.
+
 ---
 
 # Parte III — Flujo de trabajo del agente

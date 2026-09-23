@@ -72,10 +72,10 @@ export default function AdminSidebar() {
     { name: "Competidores", icon: <UserPlusIcon />, path: "/admin/competitors", enabled: true },
     { name: "Atletas", icon: <UsersIcon />, path: "/admin/athletes", enabled: true },
     { name: "Equipos", icon: <GroupIcon />, path: "/admin/teams", enabled: true },
+    { name: "Resultados", icon: <ChartIcon />, path: "/admin/scores", enabled: true },
   ];
 
   const otherItems: NavItem[] = [
-    { name: "Resultados", icon: <ChartIcon />, path: "/admin/scores", enabled: false },
     { name: "Scoring", icon: <PlugIcon />, path: "/admin/scoring", enabled: false },
   ];
 

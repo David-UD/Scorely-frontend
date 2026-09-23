@@ -648,3 +648,78 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
   inscripción no duplica el equipo (`createdTeamRef`).
 - Backend **sin tocar** (`leader\Scorely`).
 - Verificación manual (contrar con la UI) → **pendiente del usuario**.
+
+---
+
+## Paso 35 — Parte II-K: Módulo admin "Resultados" (entrada masiva por evento) (COMPLETADO)
+
+> Implementación de la spec **Parte II-K** de `PROMPT.md` (plan `PLAN.md`):
+> habilitar `/admin/scores` con **entrada masiva de resultados por evento**
+> (`EventCompetitor`) para la competición en scope. El backend recalcula
+> `event_rank`/`score` y el leaderboard público se actualiza **solo** (on-read).
+> Sin cambios de backend.
+
+### Inicio / estado previo
+- "Resultados" en el sidebar con `enabled: false` en `otherItems` ("Próximamente").
+- Endpoint backend verificado: `/api/v1/event-competitors/` (ModelViewSet, JWT) con
+  `filterset_fields = ('event', 'competitor')`; `event_rank`/`score` **read_only**.
+
+### Cambios aplicados
+- **`src/types/index.ts`**: nuevos `EventCompetitor`
+  (`id`, `competitor`, `event`, `result`, `event_rank: number | null`, `score: number | null`)
+  y `EventCompetitorWritePayload` (`id?`, `competitor`, `event`, `result`).
+- **`src/api/admin.ts`**: bloque `Results / EventCompetitor` —
+  `fetchEventCompetitors(eventId)` (`/event-competitors/?event={id}&page_size=100`),
+  `createEventCompetitor` (POST), `updateEventCompetitorResult(id, result)` (PATCH con body `{ result }`),
+  `deleteEventCompetitor` (DELETE). JWT por defecto, sin `{auth:false}`.
+- **`src/hooks/useAdminModules.ts`**: `useAdminEventCompetitors(eventId)` (query
+  `["admin","event-competitors",eventId]`, `enabled: Boolean(eventId)`, `staleTime: 30_000`)
+  y 3 mutaciones `(eventId, competitionId)` que invalidan la query del evento **y** el
+  leaderboard público `["leaderboard", competitionId]`:
+  `useCreateEventCompetitor`, `useUpdateEventCompetitor` (mutationFn `{id, result}`),
+  `useDeleteEventCompetitor`.
+- **`src/pages/admin/ScoresPage.tsx`** (nuevo): `CompetitionScopeSelect` + select de evento
+  (`WOD #{n} — {name} ({phaseLabel})`, ordenado por fase+nº) + botón "Guardar resultados"
+  (deshabilitado sin competición/evento o mientras guarda). Grilla por competidor
+  (Nº / Competidor / Tipo / Categoría / input Resultado con `aria-label`), nombres y categoría
+  resueltos con los Maps de `CompetitorsPage`. Estados: `Spinner` ("Cargando resultados…"),
+  `ErrorState`, `EmptyState` ("Sin eventos" / "Sin competidores"), banner de error con
+  `role="alert"`. Guardado masivo secuencial sobre `resultsMap`:
+  sin `id`+valor → POST; con `id`+valor → PATCH; con `id`+valor vacío → DELETE;
+  primer error corta y **conserva los inputs**. Resetea `eventId`/`resultsMap` al cambiar
+  competición y re-siembra la grilla al cambiar evento. **Preselecciona el primer WOD**
+  en orden automáticamente. Etiquetas del select: **"WOD {n}"** para Qualifiers y
+  **"WOD Final"** para la fase Final (orden qualifiers primero, luego finals por nº).
+  Filtro opcional "Categoría"
+  (select con "Todas" + categorías con inscritos, ordenadas por nombre): **solo visual**,
+  guarda todos igual; se resetea al cambiar de competición.
+- **`src/components/common/Toast.tsx`** (nuevo) + `@keyframes toast-in` en `src/index.css`:
+  notificación de éxito tras guardar. Integrado en `ScoresPage` (estado `toast`,
+  se limpia al cambiar competición/evento y al iniciar guardado; auto-dismiss 4 s,
+  botón de cierre, `role="status"`). En fallos se mantiene el banner `role="alert"`.
+- **`src/App.tsx`**: ruta `<Route path="/admin/scores" element={<ScoresPage />} />`.
+- **`src/components/admin/AdminSidebar.tsx`**: "Resultados" movido a `manageItems` con
+  `enabled: true` (`ChartIcon`); "Próximamente" queda solo con **"Scoring"**.
+- Tests: `tests/fixtures.ts` (`makeEventCompetitor`); bloque `"event-competitors"` en
+  `tests/adminApi.test.ts` (LIST/POST/PATCH body `{result}`/DELETE); `tests/ScoresPage.test.tsx`
+  (nuevo, **11 casos**: incluye filtro por categoría y toast de éxito tras guardar).
+
+### Tests (158 → **173**)
+- 23 archivos · **173/173** en verde.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **173/173** (23 archivos) — +15 tests (4 API + 11 página).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas / avisos backend (no se toca)
+- **`EventCompetitorViewSet` sin guard de competición/rol**: usa el global `IsAuthenticated`
+  y no filtra por `event__competition` ni valida el rol → la restricción queda a nivel UI
+  (scope). Para seguridad real aplicar `IsCompetitionAdmin` + `visible_competitions_q` y
+  filtrar el queryset por la competición; determina `event_rank`/`score` el `EventRankingService`.
+- **Guardado no transaccional**: N llamadas secuenciales por fila (no hay endpoint bulk).
+  En competiciones muy grandes evaluar progreso o endpoint bulk (futuro).
+- **Scoring** (`/admin/scoring`, `scoring-rules`) sigue **"Próximamente"** — follow-up que
+  determina el `score` de cada puesto.
+- Verificación manual contra la UI/backend real → **pendiente del usuario**.

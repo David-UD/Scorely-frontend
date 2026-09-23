@@ -15,6 +15,8 @@ import type {
   CompetitorWritePayload,
   EnabledCompetitionCategory,
   EnabledCompetitionCategoryWritePayload,
+  EventCompetitor,
+  EventCompetitorWritePayload,
   EventWod,
   EventWritePayload,
   Location,
@@ -344,4 +346,35 @@ export async function updateCompetitor(
 
 export async function deleteCompetitor(id: number): Promise<void> {
   await request<void>(`/competitors/${id}/`, { method: "DELETE" });
+}
+
+// ── Results / EventCompetitor (admin scope) ─────────────────────────────────
+
+export async function fetchEventCompetitors(eventId: number): Promise<EventCompetitor[]> {
+  return fetchCatalog<EventCompetitor>(
+    `/event-competitors/?event=${eventId}&page_size=100`,
+  );
+}
+
+export async function createEventCompetitor(
+  payload: EventCompetitorWritePayload,
+): Promise<EventCompetitor> {
+  return request<EventCompetitor>("/event-competitors/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateEventCompetitorResult(
+  id: number,
+  result: string,
+): Promise<EventCompetitor> {
+  return request<EventCompetitor>(`/event-competitors/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ result }),
+  });
+}
+
+export async function deleteEventCompetitor(id: number): Promise<void> {
+  await request<void>(`/event-competitors/${id}/`, { method: "DELETE" });
 }

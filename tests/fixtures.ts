@@ -5,6 +5,7 @@ import type {
   CompetitionCategory,
   Competitor,
   EnabledCompetitionCategory,
+  EventCompetitor,
   Leaderboard,
   Location,
   EventWod,
@@ -73,6 +74,20 @@ export function makeCompetitor(overrides: Partial<Competitor> = {}): Competitor 
     registration_number: "001",
     competition: 1,
     enabled_competition_category: 1,
+    ...overrides,
+  };
+}
+
+export function makeEventCompetitor(
+  overrides: Partial<EventCompetitor> = {},
+): EventCompetitor {
+  return {
+    id: 100,
+    competitor: 1,
+    event: 1,
+    result: "06:12",
+    event_rank: null,
+    score: null,
     ...overrides,
   };
 }

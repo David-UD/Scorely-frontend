@@ -196,6 +196,22 @@ export interface CompetitorWritePayload {
   enabled_competition_category: number;
 }
 
+export interface EventCompetitor {
+  id: number;
+  competitor: number;
+  event: number;
+  result: string;
+  event_rank: number | null;
+  score: number | null;
+}
+
+export interface EventCompetitorWritePayload {
+  id?: number;
+  competitor: number;
+  event: number;
+  result: string;
+}
+
 export interface CategoryRef {
   id?: number;
   code: string;

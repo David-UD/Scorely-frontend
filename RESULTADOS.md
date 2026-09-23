@@ -629,12 +629,70 @@ Sin cambios de backend.
 
 ---
 
+## Iteración 2026-09-23 — Módulo admin "Resultados" (Parte II-K)
+
+> Ejecución del plan `PLAN.md`. Entrada **masiva de resultados por evento**
+> (`EventCompetitor`) en `/admin/scores`, por competición en scope, con guardado
+> masivo POST/PATCH/DELETE. El backend recalcula `event_rank`/`score` (on-read).
+> Sin tocar el backend. **Scoring** permanece "Próximamente".
+
+### Cambios aplicados
+- `src/types/index.ts`: `EventCompetitor` (`id`, `competitor`, `event`, `result`,
+  `event_rank: number | null`, `score: number | null`) y `EventCompetitorWritePayload`.
+- `src/api/admin.ts`: `fetchEventCompetitors(eventId)` (`/event-competitors/?event={id}&page_size=100`),
+  `createEventCompetitor` (POST), `updateEventCompetitorResult(id, result)` (PATCH con body `{ result }`),
+  `deleteEventCompetitor` (DELETE) — patrón Competitors, JWT.
+- `src/hooks/useAdminModules.ts`: `useAdminEventCompetitors(eventId)` + 3 mutaciones
+  (`useCreateEventCompetitor`, `useUpdateEventCompetitor`, `useDeleteEventCompetitor`)
+  con firma `(eventId, competitionId)` que invalidan `["admin","event-competitors",eventId]`
+  **y** el leaderboard público `["leaderboard", competitionId]`.
+- `src/pages/admin/ScoresPage.tsx` (nuevo): scope + select de evento (WOD, ordenado por fase+nº
+  con `phaseLabel`) + botón "Guardar resultados" (deshabilitado sin scope/evento o guardando);
+  grilla Nº / Competidor / Tipo / Categoría / input Resultado (`aria-label`); Spinner/ErrorState/
+  EmptyState ("Sin eventos" / "Sin competidores"); banner `role="alert"` que conserva los inputs;
+  guardado masivo secuencial (sin id+valor→POST, con id+valor→PATCH, con id+valor vacío→DELETE,
+  primer error corta y no pierde cambios); reseteo al cambiar competición y re-siembra al cambiar evento.
+  **Filtro opcional "Categoría"** (select con "Todas" + categorías con inscritos, ordenadas por nombre):
+  solo visual, guarda todos igual; se resetea al cambiar de competición. **Preselecciona el primer
+  WOD** en orden al elegir competición. Etiquetas del select: "WOD {n}" (Qualifier) y
+  "WOD Final" (fase Final); qualifiers primero, luego finals por nº.
+- `src/App.tsx`: ruta `/admin/scores`. `src/components/admin/AdminSidebar.tsx`: "Resultados"
+  habilitado en Gestión (`ChartIcon`); "Próximamente" queda solo con "Scoring".
+- `src/components/common/Toast.tsx` (nuevo) + `@keyframes toast-in` en `src/index.css`:
+  notificación de éxito tras guardar ("Resultados guardados correctamente."), auto-dismiss 4 s,
+  botón de cierre y `role="status"`; se limpia al cambiar competición/evento. En fallos se
+  mantiene el banner `role="alert"`. Integrado en `ScoresPage`.
+- Tests: `makeEventCompetitor` en `tests/fixtures.ts`; bloque `"event-competitors"` en
+  `tests/adminApi.test.ts` (4 casos); `tests/ScoresPage.test.tsx` (nuevo, 11 casos,
+  incluye filtro por categoría y toast de éxito).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **173/173** en verde (23 archivos) — +15 tests |
+| `npm run build` | OK (Vite 6.4.3; warning de chunk >500 kB preexistente) |
+
+### Notas / avisos backend (no se toca)
+- **`EventCompetitorViewSet` sin guard de competición/rol** (`apps/events/views.py`): usa el
+  global `IsAuthenticated`, no filtra por `event__competition` ni valida rol → la restricción es
+  solo UI (scope). Para seguridad real: `IsCompetitionAdmin` + `visible_competitions_q` y filtrado.
+  `event_rank`/`score` los calcula `EventRankingService` (on-read).
+- **Sin endpoint bulk**: guardado = N llamadas secuenciales. Evaluar progreso/bulk para
+  competiciones muy grandes (futuro).
+- **Scoring** (`/admin/scoring`, `scoring-rules`) sigue "Próximamente": determina el score por
+  puesto y queda como follow-up.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
 - [x] lint sin errores
 - [x] typecheck sin errores
-- [x] suite de tests en verde (frontend actual: 22 archivos / 158 tests)
+- [x] suite de tests en verde (frontend actual: 23 archivos / 171 tests)
 - [x] `/` renderiza recientes + pestaña "todas" (con backend disponible/público)
 - [x] `/` muestra **todas las competiciones publicadas** con sesión activa o no (2026-09-14)
 - [x] detalle muestra info, afiliación, fechas, mapa, WODs y leaderboard
@@ -654,6 +712,7 @@ Sin cambios de backend.
 - [x] (2026-09-23) inscripción opcional en el alta de atleta: sección colapsable "Inscribir en competición" en `/admin/athletes/new` (competición + categoría + nº opcional) que crea atleta y luego competidor Individual en una sola acción (Parte II-I)
 - [x] (2026-09-23) inscripción opcional en el alta de equipo: mismo bloque en `/admin/teams/new` que crea equipo y luego competidor de equipo en una sola acción (Parte II-J)
 - [x] suite de tests en verde (frontend 153/153 → **158/158**) (2026-09-23)
+- [x] (2026-09-23) módulo admin de resultados: entrada masiva por evento en `/admin/scores` (scope + select de WOD + grilla con inputs + guardado POST/PATCH/DELETE; el backend recalcula `event_rank`/`score` on-read) + toast de éxito tras guardar + **filtro opcional por categoría** (Parte II-K) — **158 → 173/173**
 
 ## No se tocó
 

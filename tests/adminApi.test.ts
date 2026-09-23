@@ -20,6 +20,10 @@ import {
   fetchEnabledCompetitionCategories,
   fetchAffiliations,
   fetchCompetitors,
+  fetchEventCompetitors,
+  createEventCompetitor,
+  updateEventCompetitorResult,
+  deleteEventCompetitor,
   fetchLocations,
   fetchTeams,
   fetchAdminCompetitions,
@@ -477,6 +481,83 @@ describe("teams catalog", () => {
     await deleteTeam(9);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/teams/9/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("event-competitors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches event results for an event as a paginated scope", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        {
+          id: 100,
+          competitor: 1,
+          event: 5,
+          result: "06:12",
+          event_rank: null,
+          score: null,
+        },
+      ],
+    });
+    const result = await fetchEventCompetitors(5);
+    expect(result).toHaveLength(1);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/event-competitors/?event=5&page_size=100",
+    );
+  });
+
+  it("POSTs a new event result", async () => {
+    mockedRequest.mockResolvedValue({
+      id: 100,
+      competitor: 1,
+      event: 5,
+      result: "150",
+      event_rank: null,
+      score: null,
+    });
+    await createEventCompetitor({ competitor: 1, event: 5, result: "150" });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/event-competitors/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      competitor: 1,
+      event: 5,
+      result: "150",
+    });
+  });
+
+  it("PATCHes only the result", async () => {
+    mockedRequest.mockResolvedValue({
+      id: 9,
+      competitor: 1,
+      event: 5,
+      result: "03:20",
+      event_rank: null,
+      score: null,
+    });
+    await updateEventCompetitorResult(9, "03:20");
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/event-competitors/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      result: "03:20",
+    });
+  });
+
+  it("DELETEs an event result", async () => {
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteEventCompetitor(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/event-competitors/9/",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
