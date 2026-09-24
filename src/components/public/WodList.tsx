@@ -1,5 +1,6 @@
-import type { EventWod } from "@/types";
+import Badge from "@/components/common/Badge";
 import EmptyState from "@/components/common/EmptyState";
+import type { EventWod } from "@/types";
 
 export default function WodList({ phaseName, wods }: { phaseName: string; wods: EventWod[] }) {
   const visibleWods = wods.filter((wod) => wod.is_active !== false);
@@ -14,31 +15,45 @@ export default function WodList({ phaseName, wods }: { phaseName: string; wods: 
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="w-full min-w-[640px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
-            <th className="px-5 py-3.5 font-medium">Nº</th>
-            <th className="px-5 py-3.5 font-medium">Workouts</th>
-            <th className="px-5 py-3.5 font-medium">Workout</th>
-            <th className="px-5 py-3.5 font-medium">Descripción</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {visibleWods.map((wod) => (
-            <tr key={wod.id} className="align-top">
-              <td className="px-5 py-3.5 font-medium text-gray-900">{wod.event_number}</td>
-              <td className="px-5 py-3.5 font-medium text-gray-800">{wod.name}</td>
-              <td className="whitespace-pre-wrap px-5 py-3.5 text-gray-600">
-                {wod.workout || "—"}
-              </td>
-              <td className="whitespace-pre-wrap px-5 py-3.5 text-gray-600">
-                {wod.description || "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex flex-col gap-4">
+      {visibleWods.map((wod) => (
+        <details
+          key={wod.id}
+          className="group rounded-xl border border-gray-200 bg-white p-6 shadow-theme-xs"
+        >
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 [&::-webkit-details-marker]:hidden">
+            <span className="text-sm font-semibold text-brand-600">WOD {wod.event_number}</span>
+            {wod.name && (
+              <h3 className="text-base font-semibold text-gray-900">{wod.name}</h3>
+            )}
+            {phaseName.toLowerCase() === "final" && <Badge tone="success">Final</Badge>}
+            <svg
+              className="ml-auto size-4 text-gray-400 transition group-open:rotate-180"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+            {wod.workout && (
+              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-800 sm:flex-1 sm:basis-1/2">
+                {wod.workout}
+              </p>
+            )}
+
+            {wod.description && (
+              <p className="whitespace-pre-wrap text-sm text-gray-500 sm:flex-1 sm:basis-1/2">
+                {wod.description}
+              </p>
+            )}
+          </div>
+        </details>
+      ))}
     </div>
   );
 }

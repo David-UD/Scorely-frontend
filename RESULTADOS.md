@@ -746,6 +746,59 @@ Sin cambios de backend.
 
 ---
 
+## Iteración 2026-09-24 — Parte II-M: Rediseño landing de competición (CompetitionDetail)
+
+> Spec PARTE II-M de `PROMPT.md`, plan `PLAN.md`. Rediseño **visual** (solo UI/UX) de
+> `/competitions/{slug}/`: hero con métricas, action bar, Información + Mapa a la misma altura,
+> categorías en tarjetas con carrusel móvil, WODs como tarjetas con badge de fase y puntuación,
+> barra de progreso ●/○, leaderboard mejorado y escala de espaciado 48/24/16/12.
+> **Sin cambios de lógica, datos ni backend.**
+
+### Cambios aplicados
+- **`src/components/public/CompetitionHero.tsx`** (nuevo): nombre responsive, `StatusBadge`
+  (estado) + `Badge` (tipo), ciudad + fechas + año, descripción y **4 tarjetas de métricas**
+  (Atletas / Categorías / WODs / Finalistas) con `—` si el dato es `null`.
+- **`src/components/public/LocationMap.tsx`**: acepta `className="h-full"` (mapa rellena su
+  tarjeta); contenedor `flex min-h-72 flex-col`, iframe `flex-1 h-full`.
+- **`src/pages/public/CompetitionDetail.tsx`**: `<CompetitionHero>` (stats vía
+  `useCompetitors` / `useEnabledCompetitionCategories` — mismas queryKeys que
+  `CategoryInscritos`, cache compartida), **action bar** (Ver Workouts / Ver Leaderboard por
+  ancla a `id="workouts"`/`id="leaderboard"` y **Compartir** = clipboard + Toast "Enlace
+  copiado."), **Info General + Ubicación** en grid `lg:grid-cols-2` equidistante, `dl` con
+  **filas con iconos** (organizador/inicio/fin/sede/fechas), **barra de progreso** ●/○ con
+  `aria-label="N de M eventos activos"` y contenedor raíz `gap-12` (48px).
+- **`src/components/public/WodList.tsx`**: **tabla → tarjetas-colapsables** (`<details>`/`<summary>`
+  nativos, **cerradas por defecto**): "WOD N", nombre y badge **solo si es `Final`**; workout y
+  descripción con `pre-wrap`; flecha que rota al abrir.
+- **`src/components/public/CombinedLeaderboardTable.tsx`**: **`—`** en vez de `-` para
+  ausencias; **header sticky** (2 filas), **hover** en filas, **podio 1–3** con fondo
+  `bg-brand-25`, **separador Qualifier/Final** más marcado (`border-l-2`). Sorteo/`aria-sort`
+  intactos.
+- **`src/components/public/CategoryInscritos.tsx`**: card grid → **carrusel móvil**
+  (`overflow-x-auto no-scrollbar` + grid que pasa a filas únicas `sm:grid-cols-2 lg:grid-cols-4`
+  en desktop); mantiene `<li>`.
+- Tests: base **191 → 200** (+9): em-dash + sticky + podio/hover en `CombinedLeaderboardTable`;
+  tarjetas + badges de fase/puntuación en `WodList`; carrusel en `CategoryInscritos`;
+  hero con métricas, action bar + Compartir (mock clipboard), barra de progreso y ids de
+  sección en `CompetitionDetail`.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **200/200** en verde (24 archivos) — 191 → 200 (+9 tests) |
+| `npm run build` | OK (Vite 6.4.3; warning de chunk >500 kB preexistente) |
+
+### Notas
+- **SCSS vs Tailwind v4**: la consigna pedía SCSS, pero el repo no tiene SCSS (Tailwind v4 con
+  tokens `@theme` + `cn()`). Se implementó con Tailwind siguiendo el patrón existente, sin
+  añadir dependencias.
+- Manual visual en navegador (desktop 320px+) → **pendiente del usuario**.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -773,6 +826,7 @@ Sin cambios de backend.
 - [x] suite de tests en verde (frontend 153/153 → **158/158**) (2026-09-23)
 - [x] (2026-09-23) módulo admin de resultados: entrada masiva por evento en `/admin/scores` (scope + select de WOD + grilla con inputs + guardado POST/PATCH/DELETE; el backend recalcula `event_rank`/`score` on-read) + toast de éxito tras guardar + **filtro opcional por categoría** (Parte II-K) — **158 → 173/173**
 - [x] (2026-09-24) módulo admin de scoring: tabla posición → puntos en `/admin/scoring` por scope con grilla editable, panel "Regla general" (base, descenso, hasta N + preview en vivo + botón único "Generar y guardar") siempre visible y tabla en acordeón, guardado POST/PATCH/DELETE por fila; "Scoring" habilitado en el sidebar y se oculta "Próximamente" (Parte II-L) — **173 → 191/191**
+- [x] (2026-09-24) **rediseño landing de competición `CompetitionDetail`** (Parte II-M, solo UI/UX): hero con métricas, action bar (anclas + Compartir), Info + Mapa a la misma altura, tarjetas de categorías con carrusel móvil, WODs como tarjetas con badge de fase, progreso ●/○, leaderboard con sticky/hover/podio/`—` — **191 → 200/200**
 
 ## No se tocó
 
@@ -789,3 +843,4 @@ Sin cambios de backend.
 6. (Siguiente iteración) CRUD completo del panel `/admin` sobre el layout TailAdmin.
 7. **(Hecho, 2026-09-15)** Refactor del frontend al nuevo modelo: eliminadas `competition-stages`/`competition_stage`/`CompetitionStage` del código fuente; consumir `events?competition&phase`, `enabled-competition-categories` (con `finalist_slots`) y `event_results[]` como objetos.
 8. **(Pendiente, Parte II-E)** Abrir la lectura pública del los endpoints `competitors/`, `enabled-competition-categories/` y `competition-categories/` (`IsAuthenticatedOrReadOnly` en sus viewsets) para que la sección "Categorías e inscritos" muestre datos reales.
+9. **(Hecho, 2026-09-24)** Parte II-M refinada en `CombinedLeaderboardTable`: columna **Posición** como insignia circular 36×36 con podio de colores (1.º oro `#F59E0B`, 2.º plata `#94A3B8`, 3.º bronce `#B45309`, resto neutro), alineada con las celdas de WOD; en cada **WOD el color (oro) va solo al ganador** (`event_rank === 1`), sin medalla para 2.º/3.º (se eliminó el código muerto `medalFor`/`rankBadgeClass`/`PositionCell`); test de plata `medal-2` reasignado a ausencia → **200/200**.

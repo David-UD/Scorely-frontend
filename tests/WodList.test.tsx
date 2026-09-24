@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "./utils";
 import { makeWod } from "./fixtures";
 import WodList from "@/components/public/WodList";
@@ -34,5 +35,46 @@ describe("WodList", () => {
       <WodList phaseName="Qualifier" wods={[makeWod({ is_active: false })]} />,
     );
     expect(screen.getByText("Sin workouts en Qualifier")).toBeDefined();
+  });
+
+  it("renders workout cards with the Final phase badge", () => {
+    renderWithProviders(
+      <WodList
+        phaseName="Final"
+        wods={[
+          makeWod({
+            id: 2,
+            phase: "FINAL",
+            name: "Grace",
+            is_ascending: false,
+            workout: "30 clean and jerks 60kg",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("WOD 1")).toBeDefined();
+    expect(screen.getByText("Grace")).toBeDefined();
+    expect(screen.getByText("Final")).toBeDefined();
+    expect(screen.getByText(/30 clean and jerks 60kg/)).toBeDefined();
+  });
+
+  it("collapses the workout content by default and opens it on click", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(
+      <WodList
+        phaseName="Qualifier"
+        wods={[makeWod({ id: 1, event_number: 1, name: "Fran", workout: "FOR TIME\n21 thrusters" })]}
+      />,
+    );
+
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details!.hasAttribute("open")).toBe(false);
+    expect(screen.getByText(/21 thrusters/)).toBeDefined();
+
+    await user.click(screen.getByText("Fran")!);
+    expect(details!.hasAttribute("open")).toBe(true);
   });
 });

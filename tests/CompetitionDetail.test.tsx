@@ -256,11 +256,13 @@ describe("CompetitionDetail", () => {
     expect(screen.getByText("Mapa no disponible")).toBeInTheDocument();
   });
 
-  it("renders WODs in a table per phase", () => {
+  it("renders WODs as cards per phase", () => {
     renderDetail();
     expect(screen.getByRole("heading", { name: "Workouts" })).toBeInTheDocument();
-    expect(screen.getByText("WOD 1")).toBeInTheDocument();
+    expect(document.querySelectorAll("details").length).toBeGreaterThanOrEqual(5);
+    expect(screen.getAllByText("WOD 1").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Grace")).toBeInTheDocument();
+    expect(screen.getAllByText("Final").length).toBeGreaterThan(0);
   });
 
   it("renders unified leaderboard with additive total", () => {
@@ -275,8 +277,8 @@ describe("CompetitionDetail", () => {
     // Total aditivo: 400 (qualifier) + 100 (final) = 500
     expect(screen.getByText("500")).toBeInTheDocument();
 
-    // El no clasificado muestra "-" en la fase final (sin puntos) y en Total
-    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    // El no clasificado muestra "—" en la fase final (sin puntos) y en Total
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows medal icons for the WOD winner in the leaderboard", () => {
@@ -285,10 +287,10 @@ describe("CompetitionDetail", () => {
     expect(screen.getAllByTestId("medal-1").length).toBeGreaterThan(0);
   });
 
-  it("shows silver medal icon for a WOD runner-up", () => {
+  it("does not show a silver medal icon for a WOD runner-up", () => {
     renderDetail();
-    // "No Clasifica" tiene event_rank 2 en los qualifier WODs → medallas de plata
-    expect(screen.getAllByTestId("medal-2").length).toBeGreaterThan(0);
+    // Solo el ganador de cada WOD lleva insignia con color; 2.º y 3.º van sin color
+    expect(screen.queryAllByTestId("medal-2").length).toBe(0);
   });
 
   it("allows filtering leaderboard by category", async () => {
@@ -376,5 +378,65 @@ describe("CompetitionDetail", () => {
     expect(
       screen.getByText("No se pudo cargar la competición"),
     ).toBeInTheDocument();
+  });
+
+  it("shows hero stat cards with athletes, categories and wods", () => {
+    mockedUseCompetitors.mockReturnValue(
+      result<Competitor[]>([
+        makeCompetitor({ id: 1 }),
+        makeCompetitor({ id: 2 }),
+        makeCompetitor({ id: 3 }),
+      ]),
+    );
+
+    renderDetail();
+
+    expect(screen.getByText("Atletas")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Categorías")).toBeInTheDocument();
+    expect(screen.getByText("WODs")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.queryByText("Finalistas")).toBeNull();
+  });
+
+  it("shows action buttons and shares the current URL", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    });
+
+    renderDetail();
+
+    expect(screen.getByRole("button", { name: "Ver Workouts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ver Leaderboard" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Compartir" }));
+
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
+    expect(await screen.findByText("Enlace copiado.")).toBeInTheDocument();
+  });
+
+  it("renders the progress bar from active events", () => {
+    const inactiveQual = makeWod({
+      id: 9,
+      phase: "QUALIFIER",
+      event_number: 9,
+      name: "WOD Oculto",
+      is_active: false,
+    });
+    mockEvents([...qualifierWods, inactiveQual], [finalWod]);
+
+    renderDetail();
+
+    expect(
+      screen.getByLabelText("5 de 6 eventos activos"),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes section ids for scroll anchors", () => {
+    renderDetail();
+    expect(document.getElementById("info")).not.toBeNull();
+    expect(document.getElementById("workouts")).not.toBeNull();
+    expect(document.getElementById("leaderboard")).not.toBeNull();
+    expect(document.getElementById("categorias")).not.toBeNull();
   });
 });

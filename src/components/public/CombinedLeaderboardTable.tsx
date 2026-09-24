@@ -23,11 +23,11 @@ interface SortState {
 }
 
 function score(value: number | null | undefined): string {
-  return value != null ? String(value) : "-";
+  return value != null ? String(value) : "—";
 }
 
 function total(entry: CombinedLeaderboardEntry): string {
-  return entry.qualified ? String(entry.total_score) : "-";
+  return entry.qualified ? String(entry.total_score) : "—";
 }
 
 function resultByEvent(
@@ -38,16 +38,11 @@ function resultByEvent(
 }
 
 function enrich(event: EventResult | undefined): string {
-  if (!event) return "-";
+  if (!event) return "—";
   const parts: string[] = [];
   if (event.event_rank != null) parts.push(`#${event.event_rank}`);
   if (event.result) parts.push(event.result);
-  return parts.join(" · ") || "-";
-}
-
-function medalFor(rank: number | null | undefined): 1 | 2 | 3 | null {
-  if (rank === 1 || rank === 2 || rank === 3) return rank;
-  return null;
+  return parts.join(" · ") || "—";
 }
 
 function toNumber(value: string | number | null | undefined): number {
@@ -55,17 +50,25 @@ function toNumber(value: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-function WodCell({ result }: { result: EventResult | undefined }) {
+function WodCell({ result, leading }: { result: EventResult | undefined; leading: boolean }) {
   if (!result) {
-    return <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">-</td>;
+    return (
+      <td
+        className={`px-4 py-3.5 text-center text-gray-600 ${leading ? "border-l-2 border-gray-200" : "border-l border-gray-50"}`}
+      >
+        —
+      </td>
+    );
   }
 
-  const medal = medalFor(result.event_rank);
+  const isWinner = result.event_rank === 1;
 
   return (
-    <td className="border-l border-gray-50 px-4 py-3.5 text-center text-gray-600">
+    <td
+      className={`px-4 py-3.5 text-center text-gray-600 ${leading ? "border-l-2 border-gray-200" : "border-l border-gray-50"}`}
+    >
       <span className="inline-flex items-center justify-center gap-1.5">
-        {medal != null && <MedalIcon rank={medal} className="size-4 shrink-0" />}
+        {isWinner && <MedalIcon rank={1} className="size-4 shrink-0" />}
         {score(result.score)}
       </span>
       <span className="block text-xs text-gray-400">{enrich(result)}</span>
@@ -174,7 +177,7 @@ export default function CombinedLeaderboardTable({
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
       <table className="w-full min-w-[520px] text-left text-sm">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+          <tr className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
             <th
               rowSpan={2}
               onClick={() => handleSort("position")}
@@ -205,7 +208,7 @@ export default function CombinedLeaderboardTable({
             </th>
             <th
               colSpan={finalCols}
-              className="border-l border-gray-200 px-4 py-3 text-center font-semibold text-gray-500"
+              className="border-l-2 border-gray-300 px-4 py-3 text-center font-semibold text-gray-500"
             >
               Final
             </th>
@@ -221,7 +224,7 @@ export default function CombinedLeaderboardTable({
               </span>
             </th>
           </tr>
-          <tr className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+          <tr className="sticky top-11 z-10 border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
             {sortedQualWods.map((wod) => (
               <th
                 key={wod.id}
@@ -245,7 +248,7 @@ export default function CombinedLeaderboardTable({
                 key={wod.id}
                 onClick={() => handleSort(eventSortKey(wod))}
                 aria-sort={sort?.key === eventSortKey(wod) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-                className="cursor-pointer select-none border-l border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
+                className="cursor-pointer select-none border-l-2 border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
               >
                 <span className="inline-flex items-center gap-1">
                   Score {wod.event_number}
@@ -254,40 +257,63 @@ export default function CombinedLeaderboardTable({
               </th>
             ))}
             {sortedFinalWods.length === 0 && (
-              <th className="border-l border-gray-100 px-4 py-2 text-center font-medium">Score</th>
+              <th className="border-l-2 border-gray-100 px-4 py-2 text-center font-medium">Score</th>
             )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {sortedEntries.map((entry) => (
-            <tr key={`${entry.competitor_id}`} className={entry.rank === 1 ? "bg-brand-25/60" : undefined}>
-              <td className="px-5 py-3.5">
-                <span
-                  className={
-                    entry.rank === 1
-                      ? "inline-flex size-7 items-center justify-center rounded-full bg-brand-500 font-semibold text-white"
-                      : "inline-flex size-7 items-center justify-center rounded-full bg-gray-100 font-medium text-gray-600"
-                  }
-                >
-                  {entry.rank}
-                </span>
-              </td>
-              <td className="px-5 py-3.5 font-medium text-gray-800">{entry.display_name}</td>
-              {sortedQualWods.map((wod) => (
-                <WodCell key={wod.id} result={resultByEvent(entry, wod.id)} />
-              ))}
-              {sortedQualWods.length === 0 && (
-                <WodCell result={undefined} />
-              )}
-              {sortedFinalWods.map((wod) => (
-                <WodCell key={wod.id} result={resultByEvent(entry, wod.id)} />
-              ))}
-              {sortedFinalWods.length === 0 && (
-                <WodCell result={undefined} />
-              )}
-              <td className="px-5 py-3.5 text-center font-semibold text-gray-900">{total(entry)}</td>
-            </tr>
-          ))}
+          {sortedEntries.map((entry) => {
+            const podiumClass =
+              entry.rank === 1
+                ? "bg-brand-25/60"
+                : entry.rank === 2
+                  ? "bg-brand-25/40"
+                  : entry.rank === 3
+                    ? "bg-brand-25/20"
+                    : null;
+            return (
+              <tr
+                key={`${entry.competitor_id}`}
+                className={`transition hover:bg-gray-50 ${podiumClass ?? ""}`}
+              >
+                <td className="px-5 py-3.5">
+                  <span
+                    className={
+                      entry.rank === 1
+                        ? "inline-flex size-9 items-center justify-center rounded-full bg-[#F59E0B] font-semibold text-white"
+                        : entry.rank === 2
+                          ? "inline-flex size-9 items-center justify-center rounded-full bg-[#94A3B8] font-semibold text-white"
+                          : entry.rank === 3
+                            ? "inline-flex size-9 items-center justify-center rounded-full bg-[#B45309] font-semibold text-white"
+                            : "inline-flex size-9 items-center justify-center rounded-full bg-gray-100 font-medium text-gray-600"
+                    }
+                  >
+                    {entry.rank}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 font-medium text-gray-800">{entry.display_name}</td>
+                {sortedQualWods.map((wod) => (
+                  <WodCell
+                    key={wod.id}
+                    result={resultByEvent(entry, wod.id)}
+                    leading={false}
+                  />
+                ))}
+                {sortedQualWods.length === 0 && <WodCell result={undefined} leading={false} />}
+                {sortedFinalWods.map((wod) => (
+                  <WodCell
+                    key={wod.id}
+                    result={resultByEvent(entry, wod.id)}
+                    leading={true}
+                  />
+                ))}
+                {sortedFinalWods.length === 0 && <WodCell result={undefined} leading={true} />}
+                <td className="px-5 py-3.5 text-center font-semibold text-gray-900">
+                  {total(entry)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

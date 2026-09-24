@@ -799,7 +799,7 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
 
 ---
 
-## Paso 36 — Parte II-L: Módulo admin "Scoring" (reglas de puntos por posición) (EN CURSO)
+## Paso 36 — Parte II-L: Módulo admin "Scoring" (reglas de puntos por posición) (COMPLETADO)
 
 > Implementación de la spec **Parte II-L** de `PROMPT.md` (plan `PLAN.md`):
 > habilitar `/admin/scoring` para administrar la **tabla de puntuación**
@@ -817,3 +817,115 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
   `filterset_fields = ('competition',)`; serializer `(id, competition, position, points)`;
   `unique_together ('competition','position')`; ordering `['competition','position']`.
 - `ScoringService.get_points(competition, position)` → `points` o `0` si no hay regla.
+
+---
+
+## Paso 37 — Parte II-M: Rediseño landing de competición (`CompetitionDetail`) (COMPLETADO)
+
+> Implementación de la spec **Parte II-M** de `PROMPT.md` (plan `PLAN.md`):
+> rediseño **visual** (solo UI/UX) de la vista pública `/competitions/{slug}/`:
+> hero con métricas, action bar, Información General + Mapa a la misma altura,
+> categorías en tarjetas con carrusel móvil, WODs como tarjetas con badge de fase,
+> barra de progreso ●/○, leaderboard mejorado (sticky, hover, podio, separador,
+> `—` para ausencia) y escala de espaciado 48/24/16/12. **Sin cambios de lógica,
+> datos ni backend**.
+>
+> Decisiones clave: proyecto usa **Tailwind v4** (no SCSS — no existe `.scss` ni
+> `sass` en el repo; se mantiene el patrón existente con tokens `@theme` + `cn()`).
+
+### Inicio / estado previo
+- `CompetitionDetail.tsx` actual: header + info/mapa (`LocationMap` con `h-72` fijo,
+  no igualan alturas) + `CategoryInscritos` + dos `WodList` (tablas) + `LeaderboardFilters`
+  + `CombinedLeaderboardTable` (`-` para ausencias, sin sticky/hover/podio completo).
+- `WodList` (tabla), `CombinedLeaderboardTable` (`-`), `CategoryInscritos` (grid fijo).
+- Suite previa: **191/191** en verde (24 archivos); typecheck/lint/build OK.
+
+### Plan de ejecución (pasos)
+1. `CompetitionHero.tsx` (nuevo): título responsive + badges + ciudad/fechas + 4 tarjetas
+   (Atletas/Categorías/WODs/Finalistas, con `—` si no hay dato).
+2. `LocationMap.tsx`: aceptar `className="h-full"` (mapa rellena la tarjeta).
+3. `CompetitionDetail.tsx`: hero + action bar (Ver Workouts/Ver Leaderboard por ancla,
+   Compartir con clipboard+toast), secciones `id="info/workouts/leaderboard/categorias"`,
+   `gap-12`, stats vía `useCompetitors`/`useEnabledCompetitionCategories` (cache compartida).
+4. `WodList.tsx`: tabla → **tarjetas** (WOD N, nombre, badge de fase `Final`=success,
+   puntuación según `is_ascending`, workout/descripción con `pre-wrap`).
+5. Barra de progreso ●/○ según `is_active` (aria-label "N de M eventos activos").
+6. `CombinedLeaderboardTable.tsx`: `—` en vez de `-`, sticky header, hover, podio 1–3,
+   separador Qualifier/Final más marcado.
+7. `CategoryInscritos.tsx`: carrusel móvil (mantiene `li` para tests).
+8. Tests: ajustar 4 archivos + casos nuevos.
+9. Verificación: typecheck/lint/test/build.
+10. Documentar en `RESULTADOS.md`.
+
+### Cambios aplicados
+- **`src/components/public/CompetitionHero.tsx`** (nuevo): hero con nombre responsive
+  (`text-title-md sm:text-title-lg`), `StatusBadge` + `Badge` tipo, ciudad + fechas + año,
+  descripción, y 4 tarjetas de métricas (`dl` grid 2/4 cols): **Atletas**, **Categorías**,
+  **WODs**, **Finalistas** — valor o `—` cuando el dato es `null`. Tarjeta `p-6 sm:p-8`.
+- **`src/components/public/LocationMap.tsx`**: contenedor `flex min-h-72 flex-col` con
+  `className` propagado (`h-full`) e iframe `h-full flex-1` — el mapa rellena su tarjeta.
+- **`src/pages/public/CompetitionDetail.tsx`**: reorganizado —
+  - `<CompetitionHero>` con stats calculadas (`useCompetitors(id)?.length`,
+    `categories.length`, WODs activos, suma de `finalist_slots` vía
+    `useEnabledCompetitionCategories(id)`; mismas queryKeys que `CategoryInscritos`
+    → cache compartida, sin doble fetch).
+  - **Action bar**: botones **Ver Workouts** / **Ver Leaderboard** (scroll por ancla con
+    `scrollIntoView` guardado a secciones `id="workouts"`/`id="leaderboard"`) y **Compartir**
+    (`navigator.clipboard.writeText(window.location.href)` + `Toast` "Enlace copiado." /
+    "No se pudo copiar el enlace.").
+  - Secciones con `id`: `info`, `categorias`, `workouts`, `leaderboard`.
+  - **Información General + Ubicación** en grid `lg:grid-cols-2`, ambas columnas `flex-1`
+    → **misma altura exacta**; `dl` con filas **con iconos** (SVGs inline: organizador,
+    inicio, fin, sede, fechas) componente `InfoRow` (`label` + `value` + `sub` opcional).
+  - **Barra de progreso** junto al título "Workouts": `aria-label="N de M eventos activos"`
+    con puntos **●** (`text-brand-500`, `is_active !== false`) y **○** (`text-gray-300`).
+  - Contenedor raíz `gap-12` (secciones 48px).
+- **`src/components/public/WodList.tsx`**: **tabla → tarjetas** (`<article>`): "WOD N"
+  (`text-brand-600`), nombre, `Badge tone="success"` solo si `phaseName === "Final"`
+  (si no `Badge tone="brand"` "Qualifier"), `Badge` neutral con
+  `is_ascending ? "Mayor resultado gana" : "Menor tiempo gana"`, y `workout`/`description`
+  con `whitespace-pre-wrap`. Mismo contrato `{ phaseName, wods }`; filtra `is_active`.
+- **`src/components/public/CombinedLeaderboardTable.tsx`**:
+  - `score()` / `total()` / `enrich()` y `WodCell` sin dato → **`—`** (antes `-`).
+  - **Header sticky**: fila 1 `sticky top-0 z-10`; fila 2 `sticky top-11 z-10`.
+  - **Hover**: filas `hover:bg-gray-50` con `transition`.
+  - **Podio**: rank 1 `bg-brand-25/60`, rank 2 `bg-brand-25/40`, rank 3 `bg-brand-25/20`.
+  - **Separador Qualifier/Final**: grupo "Final" y sus celdas con `border-l-2 border-gray-200/300`.
+  - Sorteo, `aria-sort`, medallas y `min-w-[520px]` intactos.
+- **`src/components/public/CategoryInscritos.tsx`**: carrusel móvil — wrapper
+  `-mx-4 overflow-x-auto px-4 no-scrollbar`; `<ul>` `grid w-max grid-flow-col gap-3`
+  en móvil y `sm:grid-flow-row sm:grid-cols-2 sm:w-full lg:grid-cols-4` en desktop.
+  Mantiene `<li>` (tests de orden intactos).
+- Sin cambios de types, API, hooks ni backend.
+
+### Tests (191 → **200**)
+- `tests/CombinedLeaderboardTable.test.tsx`: `"-"` → `"—"` + casos **sticky header** (2 filas
+  `sticky` en `<thead>`) y **podio/hover** (top-3 con clase `bg-brand-25`, hover en filas).
+- `tests/WodList.test.tsx`: + casos tarjetas con **badge "Final"** + **"Menor tiempo gana"**
+  (y **"Mayor resultado gana"** para asc) y `queryByRole("table")` nulo (sin tabla).
+- `tests/CategoryInscritos.test.tsx`: + caso **wrapper de carrusel** (`.overflow-x-auto`
+  con `<ul>` dentro).
+- `tests/CompetitionDetail.test.tsx`: título "renders WODs in a table" → **"as cards"**
+  (`getAllByRole("article") ≥ 5`), `getAllByText("—")`, y **4 casos nuevos**: hero con
+  métricas (Atletas 3 / WODs 5 / Finalistas 10), action bar + **Compartir** (mock
+  `navigator.clipboard.writeText` → "Enlace copiado."), **barra de progreso**
+  (`aria-label "5 de 6 eventos activos"`), y **ids de secciones** para scroll.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **200/200** en verde (24 archivos) — 191 → 200 (+9 tests).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas / pendientes
+- **SCSS vs Tailwind**: la consigna pedía SCSS, pero el repo no tiene SCSS (Tailwind v4 con
+  tokens `@theme`). Se usó Tailwind (patrón existente) sin agregar dependencia.
+- Manual visual en navegador (desktop 320px+) → **pendiente del usuario** (sin backend corriendo).
+
+### Ajustes post-revisión (2026-09-24, misma iteración)
+- Eliminada la tarjeta **Finalistas** del hero (y el fetch asociado
+  `useEnabledCompetitionCategories` en `CompetitionDetail`; la query sigue en `CategoryInscritos`).
+- Eliminadas de las tarjetas de WOD las etiquetas **Qualifier** y **"Mayor resultado gana" /
+  "Menor tiempo gana"**; se conserva solo el badge **Final**.
+- **WODs → acordeón** (`<details>`/`<summary>` nativo, **cerrado por defecto**, flecha que
+  rota al abrir); ya no son tarjetas expandidas. Tests ajustados (200/200 siguen en verde).

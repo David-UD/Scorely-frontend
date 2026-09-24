@@ -1025,6 +1025,88 @@ Módulo de administración de **reglas de puntuación por posición** (`ScoringR
 
 ---
 
+# Parte II-M — Rediseño: landing de competición (CompetitionDetail)
+
+## 1. Título
+
+Rediseño **visual** de la vista pública del detalle de competición (`/competitions/{slug}/`, `CompetitionDetail`): hero, información general + mapa, categorías, Workouts y leaderboard. **Solo UI/UX**: no cambia la funcionalidad, el data fetching ni el modelo de datos.
+
+## 2. Objetivo
+
+- Que el usuario entienda en pocos segundos: **qué competición ve, cuándo y dónde ocurre, qué categorías tiene, cuáles son los WODs y cómo va el leaderboard**.
+- Mejorar el peso visual, la jerarquía, la consistencia espacial y el comportamiento móvil de la página existente **sin reconstruirla desde cero ni tocar la lógica de datos**.
+- Mantener el contenido dinámico del backend (competición, categorías habilitadas, eventos/WODs, leaderboard) tal cual se consume hoy.
+
+## 3. Alcance
+
+**Incluye (agrupado por el rediseño):**
+- **Hero** de la competición re-diseñado (nombre grande, badge de estado, badge de tipo, ciudad, fechas, tarjetas pequeñas con atletas/categorías/WODs/finalistas) — con mucho más peso visual que el diseño actual.
+- **Información General + Mapa**: misma altura exacta en ambas tarjetas; el mapa ocupa el 100 % de la altura de su tarjeta; contenido de información mejor distribuido; iconos para organizador, sede, ubicación y fechas.
+- **Categorías**: de chips a **tarjetas pequeñas** (nombre + cantidad de inscritos); en móvil **carrusel horizontal**.
+- **Workouts**: cada WOD pasa a ser una **tarjeta** (WOD N, nombre, badge de fase Qualifier/Final, tipo de puntuación, workout en `white-space: pre-wrap` conservando saltos de línea, descripción). El WOD Final se diferencia con un **badge "Final"** (no con otra tabla).
+- **Leaderboard**: tabla mejorada (columnas agrupadas `Pos | Atleta | Qualifier | Final | Total`, encabezado sticky, scroll horizontal en móvil, hover en filas, podio resaltado con medallas 🥇🥈🥉, separador visual entre Qualifier y Final, `—` = ausencia de resultado).
+- **Barra de progreso** de la competencia (puntos/eventos activos, ej. `● ● ● ○ ○` según WODs activos).
+- **Botones de acción**: Ver Leaderboard, Ver Workouts, Compartir.
+- **Escala de espaciado unificada**: secciones 48 px, tarjetas 24 px, contenido interno 16 px, filas 12 px.
+- **Responsive 320 px+**: hero apilado, info arriba + mapa debajo, categorías en carrusel, WODs como tarjetas verticales/acordeón, leaderboard con scroll horizontal.
+- Corregir desalineaciones existentes (alturas de tarjeta distintas, columnas desproporcionadas, contenido pegado, espacios inconsistentes).
+
+**Excluye / no se toca:**
+- **No cambia la lógica de datos**: mismos hooks, tipos, API y fixtures; solo se re-trabajan los componentes de presentación de `CompetitionDetail`.
+- **No se toca el backend**, ni la carpeta clon TailAdmin, ni se crean ramas/git.
+- **No usar `any`**. Mantener accesibilidad (roles, `aria-label`, estados de carga/error/vacío existentes).
+- No se cruzan nuevos endpoints (fuera de alcance el componente de compartir vía API).
+
+## 4. Endpoints del API utilizados (sin cambios)
+
+> **Ninguno nuevo.** Se reutilizan los ya cableados por `CompetitionDetail`: competición por slug (GET `/api/v1/competitions/{slug|id}/`), `enabled-competition-categories/?competition={id}`, `events/?competition={id}&phase=QUALIFIER`/`FINAL` y `leaderboards/competition/{id}/qualifier|final/` y `competitors/?competition={id}` (recuento de inscritos por categoría, Parte II-E).
+
+## 5. Datos / DTOs (sin cambios)
+
+- Los mismos de Parte II / II-E: `Competition`, `EnabledCompetitionCategory`, `CategoryRef`, `Competitor` (recuento), `WOD`/`Event` (`phase`, `event_number`, `name`, `workout`, `description`, `is_ascending`, `is_active`), `Leaderboard` (`entries[]` con `event_results[]`).
+- **Regla de UI obligatoria**: un `result` ausente en una fase **se renderiza como `—`**, nunca se inventa un valor almacenado.
+
+## 6. Cambios en componentes / estructura
+
+- **`src/pages/public/CompetitionDetail.tsx`** (o el archivo real existente): orquestar el nuevo layout en secciones espaciadas (hero → acciones → progreso → info/mapa → categorías → workouts → leaderboard), respetando la escala de espaciado 48/24/16/12.
+- Posibles componentes nuevos de presentación (reutilizar `cn()` y tokens del `@theme`); en orden de reutilización: `StatusBadge`, `CompetitionCard`, `LocationMap`, `EmptyState`, `Spinner`, `ErrorState`, `Toast`:
+  - `CompetitionHero` (nombre, badges estado/tipo, ciudad, fechas, tarjetas de métricas atletas/categorías/WODs/finalistas).
+  - `InfoMapGrid` (tarjeta de información con iconos organizador/sede/ubicación/fechas `MapPinIcon`/existentes + tarjeta `LocationMap` a misma altura, mapa `h-full`).
+  - `CategoryCards` (tarjetas de categoría con recuento + carrusel horizontal en móvil, `overflow-x-auto snap-x` o similar).
+  - `WodCards` (tarjetas por WOD con `white-space: pre-wrap` en `workout`, badge de fase y tipo de puntuación según `is_ascending`).
+  - `ProgressDots`/`ProgressBar` (WODs activos → puntos `●/○`).
+  - `ActionBar` (Ver Leaderboard / Ver Workouts / Compartir).
+  - `CombinedLeaderboardTable` (mejorada): columnas agrupadas, sticky header, hover, podio, separador Qualifier/Final, `—` para ausencias, scroll horizontal.
+- CSS/SCSS: si la página usa SCSS, aplicar la escala y los estilos ahí; **no romper** el patrón de estilos existente del proyecto (verificar si la vista pública usa Tailwind o SCSS).
+
+> ⚠️ **A verificar en el código real:** el proyecto declara **Tailwind CSS v4** en `PROMPT.md`, pero la consigna pide React+Vite+**SCSS**. Revisar qué usa `CompetitionDetail` y sus componentes; si mezcla ambos, mantener lo existente (respetar en qué está escrito y la escala de tokens).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Hero | Detalle con datos completos | Nombre, badges (estado/tipo), ciudad y fechas visibles; tarjetas de métricas con atletas/categorías/WODs/finalistas |
+| Info+Mapa | Ambas tarjetas | **Misma altura exacta**; el mapa rellena su tarjeta; iconos de organizador/sede/ubicación/fechas presentes |
+| Mapa sin coords | `latitude`/`longitude` nulos | Estado vacío "Mapa no disponible" (comportamiento actual conservado) |
+| Categorías | Con recuentos | Tarjetas por categoría con nombre + N inscritos; en móvil carrusel horizontal (clase aplicada) |
+| Workouts | Varios WODs Qualifier + 1 Final | Tarjeta por WOD con WOD N, nombre, badge de fase, tipo de puntuación, `workout` con saltos de línea (`pre-wrap`), badge "Final" diferenciado |
+| Leaderboard | Entradas con y sin resultados | Columnas Pos/Atleta/Qualifier/Final/Total agrupadas; podio resaltado; `—` en celdas sin dato; header sticky; hover en filas; scroll horizontal en móvil |
+| Ausencia de dato | Sin `result` en una fase | Renderiza `—`, **nunca** un valor inventado |
+| Progreso | N WODs activos de M | Barra/puntos reflejan los activos (ej. 3 de 5 → ●●●○○) |
+| Acciones | Ver Leaderboard / Ver Workouts / Compartir | Botones visibles y navegan/comparten sin romper el layout |
+| Responsive | 320 px | Hero apilado, info arriba/mapa abajo, categorías en carrusel, WODs verticales, tabla con scroll |
+| Regresión | Sin sesión, con/ sin datos | Mismos estados de carga/error/vacío y contenido dinámico del backend |
+
+## 8. Observaciones / riesgos
+
+- **Rediseño sin tocar lógica**: cuidado de no romper queries, filtración, `aria` ni el DTO del leaderboard (p. ej. no cambiar el significado de `event_results[]`). Si fuera necesario refactorizar un componente compartido, hacerlo sin cambiar su contrato.
+- **SCSS vs Tailwind**: confirmar el sistema de estilos real de la vista pública antes de escribir CSS; mantener coherencia con el resto del proyecto (la Parte II dice Tailwind v4, la consigna dice SCSS — resolver a favor de lo existente en el código).
+- **"Finalists" del hero**: dato derivado de `finalist_slots` por categoría (suma) u otra fuente ya disponible; **no** inventar un endpoint nuevo.
+- **Compartir**: sin backend → usar la URL actual (`navigator.clipboard`/`window.location`) y avisar si se espera otra cosa.
+- **Compartido con otras vistas**: `LocationMap`, `StatusBadge`, `EmptyState` y `Toast` se usan también en otros lados; si el rediseño los ajusta, verificar las regresiones (tests existentes).
+
+---
+
 # Parte III — Flujo de trabajo del agente
 
 1. **Leer antes de tocar:** revisar `Process.md`, `RESULTADOS.md` y el código existente (componentes, API client, stores, convenciones de estilo). No asumir convenciones: verificarlas en el código.

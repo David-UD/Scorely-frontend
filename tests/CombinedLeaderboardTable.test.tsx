@@ -123,8 +123,26 @@ describe("CombinedLeaderboardTable", () => {
     expect(rowsTotalDesc[2].textContent).toContain("Sofia Ruiz");
   });
 
-  it("renders dashes for entries without data in the event columns", () => {
+  it("renders em-dashes for entries without data in the event columns", () => {
     setup();
-    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the header sticky with a z-index for horizontal scroll", () => {
+    setup();
+    const headers = Array.from(document.querySelectorAll("thead th"));
+    const stickyRows = Array.from(document.querySelectorAll("thead tr"));
+    expect(stickyRows.length).toBe(2);
+    stickyRows.forEach((row) => expect(row.className).toContain("sticky"));
+    expect(headers.length).toBeGreaterThan(0);
+  });
+
+  it("highlights the podium (top 3) rows and hovers on any row", () => {
+    setup();
+    const rows = bodyRows();
+    expect(rows[0].className).toContain("bg-brand-25");
+    expect(rows[1].className).toContain("bg-brand-25");
+    expect(rows[2].className).toContain("bg-brand-25");
+    expect(rows[0].className).toContain("hover:bg-gray-50");
   });
 });

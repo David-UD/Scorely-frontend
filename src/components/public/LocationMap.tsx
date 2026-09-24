@@ -1,5 +1,6 @@
 import type { Location } from "@/types";
 import EmptyState from "@/components/common/EmptyState";
+import { cn } from "@/utils/cn";
 
 interface LocationMapProps {
   location?: Location;
@@ -38,11 +39,16 @@ export default function LocationMap({ location, className }: LocationMapProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div
+      className={cn(
+        "flex min-h-72 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white",
+        className,
+      )}
+    >
       <iframe
         title={`Mapa de ${location.name}`}
         src={embedUrl}
-        className={`h-72 w-full border-0 ${className ?? ""}`}
+        className="h-full w-full flex-1 border-0"
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
         allowFullScreen

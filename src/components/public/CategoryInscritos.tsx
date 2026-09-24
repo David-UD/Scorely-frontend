@@ -50,19 +50,21 @@ export default function CategoryInscritos({
   return (
     <section className="flex flex-col gap-4" aria-label="Categorías e inscritos">
       <h2 className="text-lg font-semibold text-gray-900">Categorías e inscritos</h2>
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {counts.map((item) => (
-          <li
-            key={item.code}
-            className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-theme-xs"
-          >
-            <span className="text-sm font-medium text-gray-800">{item.name}</span>
-            <Badge tone="brand">
-              {item.count} {item.count === 1 ? "inscrito" : "inscritos"}
-            </Badge>
-          </li>
-        ))}
-      </ul>
+      <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
+        <ul className="grid w-max grid-flow-col auto-cols-fr gap-3 sm:w-full sm:grid-flow-row sm:grid-cols-2 sm:auto-cols-auto lg:grid-cols-4">
+          {counts.map((item) => (
+            <li
+              key={item.code}
+              className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-theme-xs"
+            >
+              <span className="text-sm font-medium text-gray-800">{item.name}</span>
+              <Badge tone="brand">
+                {item.count} {item.count === 1 ? "inscrito" : "inscritos"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }

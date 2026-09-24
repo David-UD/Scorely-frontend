@@ -134,6 +134,24 @@ describe("CategoryInscritos", () => {
     expect(screen.getByText("Cargando inscritos…")).toBeInTheDocument();
   });
 
+  it("wraps the cards in a horizontal carousel container (mobile)", () => {
+    mockedUseEnabledCompetitionCategories.mockReturnValue(
+      result<EnabledCompetitionCategory[]>(enabled),
+    );
+    mockedUseCompetitionCategories.mockReturnValue(
+      result<CompetitionCategory[]>(catalog),
+    );
+    mockedUseCompetitors.mockReturnValue(result<Competitor[]>(competitors));
+
+    const { container } = render(
+      <CategoryInscritos competitionId={1} categories={categories} />,
+    );
+
+    const carousel = container.querySelector(".overflow-x-auto");
+    expect(carousel).not.toBeNull();
+    expect(carousel?.querySelector("ul")).not.toBeNull();
+  });
+
   it("renders nothing when loading fails (graceful degradation)", () => {
     mockedUseCompetitors.mockReturnValue({
       data: undefined,
