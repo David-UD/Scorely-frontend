@@ -687,6 +687,65 @@ Sin cambios de backend.
 
 ---
 
+## Iteración 2026-09-24 — Módulo admin "Scoring" (Parte II-L)
+
+> Ejecución del plan `PLAN.md`. Tabla **posición → puntos** (`ScoringRule`) en
+> `/admin/scoring`, por competición en scope, con grilla editable masiva y
+> **"Regla general"**: generación automática de la tabla como progresión
+> aritmética (base, descenso por puesto, hasta posición). Guardado
+> POST/PATCH/DELETE por fila. Backend recalcula el score on-read. Sin tocar el backend.
+
+### Cambios aplicados
+- `src/types/index.ts`: `ScoringRule` (`id`, `competition`, `position`, `points`) y
+  `ScoringRuleWritePayload` (`id?`, `competition`, `position`, `points`).
+- `src/api/admin.ts`: bloque `Scoring rules (admin scope)` —
+  `fetchScoringRules(competitionId)` (`/scoring-rules/?competition={id}&page_size=100`, JWT),
+  `createScoringRule` (POST), `updateScoringRule(id, position, points)` (PATCH body `{position, points}`),
+  `deleteScoringRule` (DELETE).
+- `src/hooks/useAdminModules.ts`: `useAdminScoringRules(competitionId)` + 3 mutaciones
+  (`useCreateScoringRule`, `useUpdateScoringRule`, `useDeleteScoringRule`) que invalidan
+  `["admin","scoring-rules",competitionId]` **y** el leaderboard público `["leaderboard", competitionId]`.
+- `src/pages/admin/ScoringPage.tsx` (nuevo): toolbar con solo el **scope**; **panel "Regla general"
+  siempre visible** (base / descenso / hasta N) con **preview en vivo** de la secuencia y un
+  **solo botón "Generar y guardar"** que calcula, rellena la grilla como confirmación y guarda
+  en un clic; **tabla de posiciones en acordeón** colapsable (cerrado por defecto y al cambiar
+  de competición) con contador de reglas activas y chevron, y los botones **"Añadir posición"** /
+  **"Guardar reglas"** dentro del acordeón (barra sobre la grilla); **responsive móvil**
+  (inputs `w-full sm:w-32`, botones apilados, tabla con scroll horizontal); grilla editable
+  Posición/Puntos/Acciones ordenada por posición; Spinner/ErrorState/EmptyState; banner
+  `role="alert"` que conserva las filas; toast de éxito `role="status"`; guardado masivo
+  secuencial (removida con id→DELETE, con id→PATCH, sin id→POST); reseteo al cambiar competición.
+- **"Regla general"**: `puntos(p) = max(0, base − (p−1)·descenso)`, único clic
+  ("Generar y guardar") reutiliza filas existentes por posición y marca `removed` las reglas
+  guardadas fuera del rango (se borran al guardar).
+- `src/App.tsx`: ruta `/admin/scoring`. `src/components/admin/AdminSidebar.tsx`: "Scoring"
+  habilitado en Gestión (`TrophyIcon`); **se oculta la sección "Próximamente"** (queda vacía
+  y no se renderiza; se elimina `PlugIcon`).
+- Tests: `makeScoringRule` en `tests/fixtures.ts`; bloque `"scoring rules"` en
+  `tests/adminApi.test.ts` (4 casos); `tests/ScoringPage.test.tsx` (nuevo, 14 casos —
+  incluye "Generar y guardar" en un clic, preview en vivo, piso de puntos en 0,
+  reutilización de filas y colapsar/expandir el acordeón de la tabla).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **191/191** en verde (24 archivos) — 173 → 191 (+18 tests) |
+| `npm run build` | OK (Vite 6.4.3; warning de chunk >500 kB preexistente) |
+
+### Notas / avisos backend (no se toca)
+- **`ScoringRuleViewSet` sin guard de competición/rol** (`apps/scoring`): usa el global
+  `IsAuthenticated` y no filtra por competición ni valida rol → la restricción es solo UI
+  (scope). Para seguridad real: `IsCompetitionAdmin` + `visible_competitions_q` y filtrado.
+- **`unique_together (competition, position)`**: crear/editar a una posición ya ocupada responde
+  4xx → banner `role="alert"` que conserva las filas. Reordenar posiciones queda fuera.
+- **Sin reglas = 0 puntos**: `ScoringService.get_points` devuelve `0` si no existe la regla.
+- **Sin endpoint bulk**: guardado = N llamadas secuenciales por fila.
+- No se crearon ramas ni se hizo commit/push.
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -713,6 +772,7 @@ Sin cambios de backend.
 - [x] (2026-09-23) inscripción opcional en el alta de equipo: mismo bloque en `/admin/teams/new` que crea equipo y luego competidor de equipo en una sola acción (Parte II-J)
 - [x] suite de tests en verde (frontend 153/153 → **158/158**) (2026-09-23)
 - [x] (2026-09-23) módulo admin de resultados: entrada masiva por evento en `/admin/scores` (scope + select de WOD + grilla con inputs + guardado POST/PATCH/DELETE; el backend recalcula `event_rank`/`score` on-read) + toast de éxito tras guardar + **filtro opcional por categoría** (Parte II-K) — **158 → 173/173**
+- [x] (2026-09-24) módulo admin de scoring: tabla posición → puntos en `/admin/scoring` por scope con grilla editable, panel "Regla general" (base, descenso, hasta N + preview en vivo + botón único "Generar y guardar") siempre visible y tabla en acordeón, guardado POST/PATCH/DELETE por fila; "Scoring" habilitado en el sidebar y se oculta "Próximamente" (Parte II-L) — **173 → 191/191**
 
 ## No se tocó
 

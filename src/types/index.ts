@@ -212,6 +212,20 @@ export interface EventCompetitorWritePayload {
   result: string;
 }
 
+export interface ScoringRule {
+  id: number;
+  competition: number;
+  position: number;
+  points: number;
+}
+
+export interface ScoringRuleWritePayload {
+  id?: number;
+  competition: number;
+  position: number;
+  points: number;
+}
+
 export interface CategoryRef {
   id?: number;
   code: string;

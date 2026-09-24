@@ -24,6 +24,10 @@ import {
   createEventCompetitor,
   updateEventCompetitorResult,
   deleteEventCompetitor,
+  fetchScoringRules,
+  createScoringRule,
+  updateScoringRule,
+  deleteScoringRule,
   fetchLocations,
   fetchTeams,
   fetchAdminCompetitions,
@@ -558,6 +562,64 @@ describe("event-competitors", () => {
     await deleteEventCompetitor(9);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/event-competitors/9/",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("scoring rules", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches scoring rules for a competition as a paginated scope", async () => {
+    mockedRequest.mockResolvedValue({
+      results: [
+        { id: 1, competition: 5, position: 1, points: 100 },
+        { id: 2, competition: 5, position: 2, points: 90 },
+      ],
+    });
+    const result = await fetchScoringRules(5);
+    expect(result).toHaveLength(2);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/scoring-rules/?competition=5&page_size=100",
+    );
+  });
+
+  it("POSTs a new scoring rule", async () => {
+    mockedRequest.mockResolvedValue({ id: 3, competition: 5, position: 1, points: 100 });
+    await createScoringRule({ competition: 5, position: 1, points: 100 });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/scoring-rules/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      competition: 5,
+      position: 1,
+      points: 100,
+    });
+  });
+
+  it("PATCHes position and points", async () => {
+    mockedRequest.mockResolvedValue({ id: 9, competition: 5, position: 2, points: 90 });
+    await updateScoringRule(9, 2, 90);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/scoring-rules/9/",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    const options = mockedRequest.mock.calls[0][1];
+    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
+      position: 2,
+      points: 90,
+    });
+  });
+
+  it("DELETEs a scoring rule", async () => {
+    mockedRequest.mockResolvedValue(undefined);
+    await deleteScoringRule(9);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/scoring-rules/9/",
       expect.objectContaining({ method: "DELETE" }),
     );
   });

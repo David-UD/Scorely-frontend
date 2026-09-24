@@ -10,7 +10,6 @@ import {
   GroupIcon,
   ListIcon,
   MapPinIcon,
-  PlugIcon,
   TrophyIcon,
   UserPlusIcon,
   UsersIcon,
@@ -73,10 +72,7 @@ export default function AdminSidebar() {
     { name: "Atletas", icon: <UsersIcon />, path: "/admin/athletes", enabled: true },
     { name: "Equipos", icon: <GroupIcon />, path: "/admin/teams", enabled: true },
     { name: "Resultados", icon: <ChartIcon />, path: "/admin/scores", enabled: true },
-  ];
-
-  const otherItems: NavItem[] = [
-    { name: "Scoring", icon: <PlugIcon />, path: "/admin/scoring", enabled: false },
+    { name: "Scoring", icon: <TrophyIcon />, path: "/admin/scoring", enabled: true },
   ];
 
   const isActive = (path: string) =>
@@ -175,22 +171,6 @@ export default function AdminSidebar() {
                 {expanded ? "Gestión" : <DotsIcon className="size-6" />}
               </h2>
               <ul className="flex flex-col gap-1">{manageItems.map(renderItem)}</ul>
-            </div>
-            <div>
-              <h2
-                className={`mb-4 flex text-xs uppercase leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
-                }`}
-              >
-                {expanded ? (
-                  "Próximamente"
-                ) : (
-                  <span title="Próximamente">
-                    <DotsIcon className="size-6" />
-                  </span>
-                )}
-              </h2>
-              <ul className="flex flex-col gap-1">{otherItems.map(renderItem)}</ul>
             </div>
           </div>
         </nav>

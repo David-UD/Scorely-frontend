@@ -723,3 +723,97 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
 - **Scoring** (`/admin/scoring`, `scoring-rules`) sigue **"Próximamente"** — follow-up que
   determina el `score` de cada puesto.
 - Verificación manual contra la UI/backend real → **pendiente del usuario**.
+
+### Cambios aplicados
+- **`src/types/index.ts`**: nuevos `ScoringRule`
+  (`id`, `competition`, `position`, `points`) y `ScoringRuleWritePayload`
+  (`id?`, `competition`, `position`, `points`).
+- **`src/api/admin.ts`**: bloque `Scoring rules (admin scope)` —
+  `fetchScoringRules(competitionId)` (`/scoring-rules/?competition=${competitionId}&page_size=100`),
+  `createScoringRule` (POST), `updateScoringRule(id, position, points)` (PATCH con body
+  `{ position, points }`), `deleteScoringRule` (DELETE). JWT por defecto.
+- **`src/hooks/useAdminModules.ts`**: `useAdminScoringRules(competitionId)` (query
+  `["admin","scoring-rules", competitionId]`, `enabled: Boolean(competitionId)`, `staleTime: 30_000`)
+  y 3 mutaciones `(competitionId)` que invalidan la query **y** el leaderboard público
+  `["leaderboard", competitionId]`:
+  `useCreateScoringRule`, `useUpdateScoringRule` (mutationFn `{id, position, points}`),
+  `useDeleteScoringRule`.
+- **`src/pages/admin/ScoringPage.tsx`** (nuevo): `CompetitionScopeSelect` + botones
+  "Añadir posición" y "Guardar reglas" (deshabilitados sin competición o mientras guarda).
+  Grilla editable `Posición (input nº)` / `Puntos (input nº)` / `Acciones (Quitar)`.
+  Filas ordenadas por `position` asc. Estados: `Spinner` ("Cargando reglas…"),
+  `ErrorState`, `EmptyState` ("Sin reglas de puntuación") con hint para añadir.
+  Guardado masivo secuencial sobre `rows`: fila `removed` con `id` → DELETE; fila sin `removed`
+  con `id` → PATCH; fila nueva sin `id` → POST. Validación mínima (`position >= 1`, `points >= 0`);
+  primer error corta y **conserva las filas** para reintentar. Auto-siembra al cargar/cambiar
+  competición y toast de éxito ("Reglas guardadas correctamente.") con `role="status"`;
+  banner de error `role="alert"`.
+- **`src/App.tsx`**: ruta `<Route path="/admin/scoring" element={<ScoringPage />} />`.
+- **`src/components/admin/AdminSidebar.tsx`**: "Scoring" movido a `manageItems` con
+  `enabled: true` (`TrophyIcon`); se **elimina** la sección "Próximamente" (queda vacía y no se renderiza).
+  Se quita `PlugIcon` del import.
+- Tests: `tests/fixtures.ts` (`makeScoringRule`); bloque `"scoring rules"` en
+  `tests/adminApi.test.ts` (LIST/POST/PATCH/DELETE); `tests/ScoringPage.test.tsx`
+  (nuevo, **10 casos**: spinner, lista ordenada, añadir+crear, editar, quitar+delete, descartar nueva removida,
+  empty state, error conserva filas, toast de éxito, deshabilitado sin scope).
+
+#### Mejora pedida por el usuario: "Regla general" (progresión aritmética)
+- Panel **"Regla general"** siempre visible en `ScoringPage` (sin toggle) con
+  `base` (puntos 1.er puesto), `descenso` (resta por puesto) y `hasta posición` (N).
+- **Preview en vivo** dentro del panel: muestra "Nº = valor" para cada posición que se
+  generará a medida que se cargan los campos.
+- **Un solo botón "Generar y guardar"**: calcula la secuencia (`puntos(p) = max(0, base - (p-1)*descenso)`,
+  piso en 0), rellena la grilla reutilizando filas existentes por posición, marca `removed`
+  las reglas guardadas fuera del rango (se borran al guardar) y guarda todo en un único clic
+  (POST/PATCH/DELETE). "Guardar reglas" del toolbar queda solo para ajustes manuales.
+- La **tabla de posiciones** quedó bajo un **acordeón colapsable** ("Tabla de posiciones",
+  con contador de reglas activas y chevron), **cerrado por defecto** y al cambiar de competición.
+  Los botones **"Añadir posición"** y **"Guardar reglas"** viven dentro del acordeón
+  (barra sobre la grilla), no en el toolbar superior (que solo tiene el selector de competición).
+  **Responsive**: campos de generación al 100 % en móvil (`flex-1` + `w-full sm:w-32`), botones
+  de acción apilados (`flex-col-reverse sm:flex-row`), tabla con scroll horizontal (`overflow-x-auto`).
+- Tests nuevos en `tests/ScoringPage.test.tsx` (14 casos totales en el archivo):
+  genera+guarda en un clic (base 100, descenso 2, hasta 5 → 98/96/94/92),
+  piso de puntos en 0 + reutilización de filas por posición, preview en vivo,
+  y colapsar/expandir el acordeón.
+
+### Tests (173 → **191**)
+- 24 archivos · **191/191** en verde — +18 tests (4 API + 14 página).
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **191/191** (24 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas / avisos backend (no se toca)
+- **`ScoringRuleViewSet` sin guard de competición/rol**: usa el global `IsAuthenticated`
+  y no filtra por competición ni valida el rol → la restricción queda a nivel UI (scope).
+  Para seguridad real aplicar `IsCompetitionAdmin` + `visible_competitions_q` y filtrar
+  el queryset por competición.
+- **`unique_together (competition, position)`**: crear/editar a una posición ocupada responde
+  4xx; la UI muestra el banner `role="alert"` (no reordena posiciones en esta iteración).
+- **Sin reglas = 0 puntos**: `ScoringService.get_points` devuelve `0` si no existe la regla.
+- **Guardado no transaccional**: N llamadas secuenciales por fila (sin endpoint bulk).
+- Verificación manual contra la UI/backend real → **pendiente del usuario**.
+
+---
+
+## Paso 36 — Parte II-L: Módulo admin "Scoring" (reglas de puntos por posición) (EN CURSO)
+
+> Implementación de la spec **Parte II-L** de `PROMPT.md` (plan `PLAN.md`):
+> habilitar `/admin/scoring` para administrar la **tabla de puntuación**
+> (`ScoringRule`, posición → puntos) de la competición en scope, con **guardado
+> masivo editable** (estilo `ScoresPage` de II-K). Al habilitarse, la sección
+> **"Próximamente"** del sidebar queda vacía y se **oculta**. El backend recalcula
+> `score`/leaderboard on-read (`ScoringService.get_points`). Sin cambios de backend.
+>
+> Decisiones de usuario confirmadas: **grilla masiva editable** + **ocultar "Próximamente"**.
+
+### Inicio / estado previo
+- "Scoring" en el sidebar `otherItems` con `enabled: false` (sección "Próximamente",
+  `PlugIcon`).
+- Endpoint backend verificado: `/api/v1/scoring-rules/` (ModelViewSet, JWT) con
+  `filterset_fields = ('competition',)`; serializer `(id, competition, position, points)`;
+  `unique_together ('competition','position')`; ordering `['competition','position']`.
+- `ScoringService.get_points(competition, position)` → `points` o `0` si no hay regla.

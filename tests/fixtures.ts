@@ -11,6 +11,7 @@ import type {
   EventWod,
   EventResult,
   EventPhase,
+  ScoringRule,
   Team,
 } from "@/types";
 
@@ -88,6 +89,18 @@ export function makeEventCompetitor(
     result: "06:12",
     event_rank: null,
     score: null,
+    ...overrides,
+  };
+}
+
+export function makeScoringRule(
+  overrides: Partial<ScoringRule> = {},
+): ScoringRule {
+  return {
+    id: 1,
+    competition: 1,
+    position: 1,
+    points: 100,
     ...overrides,
   };
 }

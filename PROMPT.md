@@ -942,6 +942,89 @@ Catálogos auxiliares ya cableados en el admin: `/competitors/?competition={id}&
 
 ---
 
+# Parte II-L — Módulo admin: Scoring (reglas de puntos por posición)
+
+## 1. Título
+
+Módulo de administración de **reglas de puntuación por posición** (`ScoringRule`) en el panel: en `/admin/scoring`, para la competición en scope, se administra la **tabla de puntos** (`posición → points`) que el backend usa para convertir cada `event_rank` en `score`. Es la pieza que complementa a **Resultados** (Parte II-K): allí se cargan los `result` crudos; acá se define cuántos puntos vale cada puesto para armar el leaderboard.
+
+## 2. Objetivo
+
+- Permitir al **admin de competición** (y al superuser) ver y mantener la tabla de puntuación de la competición seleccionada: cada fila = `position` (1-based) → `points`.
+- Centralizar en la UI una configuración que hoy solo se carga por seed (`seed_data.py` → `_seed_scoring_rules`); sin reglas, `ScoringService.get_points()` devuelve `0` y el leaderboard no refleja puntos.
+- El cálculo NO corre en el frontend: al leer, el backend (`EventRankingService`/`ScoringService`, on-read) aplica `position → points`.
+
+## 3. Alcance
+
+**Incluye:**
+- Página `/admin/scoring` con `CompetitionScopeSelect` (competición asignada).
+- **Grilla de reglas** (`position → points`) de esa competición, ordenada por `position`:
+  - Precarga desde `GET /scoring-rules/?competition={id}&page_size=100`.
+  - **Alta**: fila nueva con `position` autosugerido (primer hueco libre o `N+1`) y `points` a definir → `POST /scoring-rules/`.
+  - **Edición**: filas existentes precargadas; cambiar `position`/`points` → `PATCH /scoring-rules/{id}/`.
+  - **Baja por fila**: quitar una regla → `DELETE /scoring-rules/{id}/`.
+- Guardado masivo secuencial (estilo `ScoresPage` de II-K — **UX confirmada**): botón **Guardar reglas** (POST para nuevas, PATCH para editadas, DELETE para eliminadas) con banner `role="alert"` de `ApiError` si falla, conservando los valores para reintentar.
+- Tras guardar: invalidar `["admin","scoring-rules", competitionId]` **y** el leaderboard público `["leaderboard", competitionId]` (el `score` se recalcula on-read).
+- Ítem **"Scoring"** habilitado en el sidebar → `/admin/scoring` en `manageItems` (sale de "Próximamente"). **Sin gate superadmin**: admins de competición sobre sus competiciones asignadas (scope; superuser ve todas). Con esto **"Próximamente" queda vacío** → **decisión confirmada:** se **oculta** la sección "Próximamente" del sidebar (queda sin renderizar).
+
+**Excluye / decisiones:**
+- **No se toca el backend**: `ScoringRuleViewSet` = `ModelViewSet` con `filterset_fields = ('competition',)`, sin `permission_classes` → global `IsAuthenticated`, sin guard de competición/rol. La restricción es **solo UI** (scope). Aviso backend para seguridad real: `IsCompetitionAdmin` + `visible_competitions_q` y filtro por competición.
+- **No hay cálculo en frontend**: el `score` lo aplica el backend (`ScoringService.get_points`) on-read; este módulo solo administra la tabla.
+- `ScoringRule` = una fila por `(competition, position)` (`unique_together`): crear/editar a una posición ya ocupada responde 4xx (manejar con banner) → alternativas UI (reordenar) quedan fuera de esta iteración.
+- No se gestionan horarios/heats/jueces.
+
+## 4. Endpoints del API utilizados
+
+> **Shape verificado en el backend** (`leader\Scorely/apps/scoring`): `ScoringRule` = `(competition, position, points)` con `unique_together (competition, position)` y `ordering ['competition','position']`; `ScoringRuleSerializer` = `(id, competition, position, points)`; `ScoringRuleViewSet` = `ModelViewSet` con `filterset_fields = ('competition',)` y sin `permission_classes` → global `IsAuthenticated`.
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Reglas de una competición | GET | `/api/v1/scoring-rules/?competition={id}&page_size=100` | JWT | Para precargar la grilla |
+| Crear regla | POST | `/api/v1/scoring-rules/` | JWT | Payload `{ competition, position, points }` — no duplicar `(competition, position)` |
+| Editar regla | PATCH | `/api/v1/scoring-rules/{id}/` | JWT | Parcial, `{ position?, points? }` |
+| Quitar regla | DELETE | `/api/v1/scoring-rules/{id}/` | JWT | — |
+
+> ⚠️ **Aviso backend (no se toca en esta Parte II-L):** `ScoringRuleViewSet` no filtra por competición ni valida rol → cualquier usuario autenticado puede leer/escribir reglas de cualquier competición. La seguridad real es un cambio backend.
+
+## 5. Datos / DTOs
+
+- `ScoringRule` (DTO nuevo): `{ id, competition, position, points }` (`competition` = id; `position` 1-based; `points` enteros).
+- `ScoringRuleWritePayload` (DTO nuevo): `{ id?, competition, position, points }`.
+- Reutilizados: patrón `EventCompetitorWritePayload` de II-K y `CompetitionScopeSelect` del admin.
+
+## 6. Cambios en componentes / estructura
+
+- `src/types/index.ts`: `ScoringRule` y `ScoringRuleWritePayload`.
+- `src/api/admin.ts`: `fetchScoringRules(competitionId)` (`/scoring-rules/?competition={id}&page_size=100`), `createScoringRule(payload)`, `updateScoringRule(id, { position, points })`, `deleteScoringRule(id)` — JWT por defecto, patrón `EventCompetitor` (II-K).
+- `src/hooks/useAdminModules.ts`: `useAdminScoringRules(competitionId)` (`["admin","scoring-rules", competitionId]`), `useCreateScoringRule`, `useUpdateScoringRule`, `useDeleteScoringRule` — invalidan la query **y** el leaderboard público `["leaderboard", competitionId]`.
+- `src/pages/admin/ScoringPage.tsx` (nuevo): scope + grilla editable `position → points` + botón **Guardar reglas** (guardado masivo secuencial POST/PATCH/DELETE) con banner `role="alert"`; Spinner/ErrorState/EmptyState; al cambiar de competición se re-siembra y si la competición no tiene reglas se ofrece una fila nueva.
+- `src/App.tsx`: ruta `/admin/scoring`. `src/components/admin/AdminSidebar.tsx`: **"Scoring" → `enabled: true`**, `path: "/admin/scoring"`, movido de "Próximamente" a `manageItems`; ícono `TrophyIcon` (ya existe en `icons.tsx`). La sección **"Próximamente" se oculta** (deja de renderizarse, queda vacía).
+- Tests: fixture `makeScoringRule`; bloque en `tests/adminApi.test.ts` (LIST/POST/PATCH/DELETE); `tests/ScoringPage.test.tsx` (nuevo).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| LIST | `/admin/scoring` con scope | Grilla `position → points` precargada, ordenada por `position` |
+| Guardar reglas | Filas nuevas y editadas | POST para las nuevas, PATCH para las editadas |
+| Quitar regla | Fila eliminada | `DELETE /scoring-rules/{id}/` |
+| Sin reglas | Competición sin `ScoringRule` | Fila nueva sugerida (o EmptyState + alta), no rompe |
+| Posición duplicada | Crear/editar a posición ya ocupada | Banner `role="alert"` con el `ApiError` (4xx), valores conservados |
+| Error al guardar | Fallo de una llamada | Banner con el `ApiError`, inputs conservados |
+| Sin scope | `/admin/scoring` sin competición | Grilla vacía / botón Guardar deshabilitado |
+| Regresión | Tras guardar | Se invalidan queries; el leaderboard público refleja los nuevos puntos (recalculo on-read) |
+
+## 8. Observaciones / riesgos
+
+- **Escrituras sin guard de competición/rol**: `ScoringRuleViewSet` queda en el global `IsAuthenticated`; la restricción es **solo visual** (scope) en frontend. Aviso backend: `IsCompetitionAdmin` + `visible_competitions_q` para una regla real.
+- **`unique_together (competition, position)`**: crear/editar a una posición ocupada responde 4xx → manejar en la UI (no duplicar posiciones).
+- **Sin reglas = 0 puntos**: `ScoringService.get_points()` devuelve `0` si no existe `ScoringRule` para la posición → el leaderboard puede quedar sin puntos hasta que se carguen las reglas (avisar en la UI/EmptyState si aplica).
+- **Leer vs calcular**: este módulo no toca el cálculo; tras guardar solo invalida el leaderboard para que el recalculo on-read se vea.
+- **Grilla sobre `page_size=100`**: las tablas de puntuación suelen ser cortas (top N); igual que el resto del admin.
+- **Complementa a II-K**: Resultados (datos crudos) + Scoring (puntos por puesto) = leaderboard. Al habilitar Scoring, "Próximamente" del sidebar queda vacío y **se oculta** (decisión confirmada).
+
+---
+
 # Parte III — Flujo de trabajo del agente
 
 1. **Leer antes de tocar:** revisar `Process.md`, `RESULTADOS.md` y el código existente (componentes, API client, stores, convenciones de estilo). No asumir convenciones: verificarlas en el código.

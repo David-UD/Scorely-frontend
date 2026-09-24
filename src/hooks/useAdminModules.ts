@@ -8,6 +8,7 @@ import {
   createEvent,
   createEventCompetitor,
   createLocation,
+  createScoringRule,
   createTeam,
   deleteAffiliation,
   deleteAthlete,
@@ -17,6 +18,7 @@ import {
   deleteEvent,
   deleteEventCompetitor,
   deleteLocation,
+  deleteScoringRule,
   deleteTeam,
   fetchAffiliations,
   fetchAthletes,
@@ -26,6 +28,7 @@ import {
   fetchEvents,
   fetchEventCompetitors,
   fetchLocations,
+  fetchScoringRules,
   fetchTeams,
   updateAffiliation,
   updateAthlete,
@@ -35,6 +38,7 @@ import {
   updateEvent,
   updateEventCompetitorResult,
   updateLocation,
+  updateScoringRule,
   updateTeam,
 } from "@/api/admin";
 import type {
@@ -44,6 +48,7 @@ import type {
   EnabledCompetitionCategoryWritePayload,
   EventCompetitorWritePayload,
   LocationWritePayload,
+  ScoringRuleWritePayload,
 } from "@/types";
 
 export function useAdminEvents(competitionId: number | null) {
@@ -454,6 +459,63 @@ export function useDeleteEventCompetitor(
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["admin", "event-competitors", eventId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
+      });
+    },
+  });
+}
+
+// ── Scoring rules (admin scope) ─────────────────────────────────────────────
+
+export function useAdminScoringRules(competitionId: number | null) {
+  return useQuery({
+    queryKey: ["admin", "scoring-rules", competitionId],
+    queryFn: () => fetchScoringRules(competitionId as number),
+    enabled: Boolean(competitionId),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateScoringRule(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ScoringRuleWritePayload) => createScoringRule(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "scoring-rules", competitionId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
+      });
+    },
+  });
+}
+
+export function useUpdateScoringRule(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: number; position: number; points: number }) =>
+      updateScoringRule(args.id, args.position, args.points),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "scoring-rules", competitionId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["leaderboard", competitionId],
+      });
+    },
+  });
+}
+
+export function useDeleteScoringRule(competitionId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteScoringRule,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "scoring-rules", competitionId],
       });
       queryClient.invalidateQueries({
         queryKey: ["leaderboard", competitionId],

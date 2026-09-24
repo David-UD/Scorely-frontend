@@ -21,6 +21,8 @@ import type {
   EventWritePayload,
   Location,
   LocationWritePayload,
+  ScoringRule,
+  ScoringRuleWritePayload,
   Team,
   TeamWritePayload,
 } from "@/types";
@@ -377,4 +379,36 @@ export async function updateEventCompetitorResult(
 
 export async function deleteEventCompetitor(id: number): Promise<void> {
   await request<void>(`/event-competitors/${id}/`, { method: "DELETE" });
+}
+
+// ── Scoring rules (admin scope) ─────────────────────────────────────────────
+
+export async function fetchScoringRules(competitionId: number): Promise<ScoringRule[]> {
+  return fetchCatalog<ScoringRule>(
+    `/scoring-rules/?competition=${competitionId}&page_size=100`,
+  );
+}
+
+export async function createScoringRule(
+  payload: ScoringRuleWritePayload,
+): Promise<ScoringRule> {
+  return request<ScoringRule>("/scoring-rules/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateScoringRule(
+  id: number,
+  position: number,
+  points: number,
+): Promise<ScoringRule> {
+  return request<ScoringRule>(`/scoring-rules/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ position, points }),
+  });
+}
+
+export async function deleteScoringRule(id: number): Promise<void> {
+  await request<void>(`/scoring-rules/${id}/`, { method: "DELETE" });
 }

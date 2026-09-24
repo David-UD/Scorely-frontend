@@ -25,6 +25,7 @@ import TeamFormPage from "@/pages/admin/TeamFormPage";
 import CompetitorsPage from "@/pages/admin/CompetitorsPage";
 import CompetitorFormPage from "@/pages/admin/CompetitorFormPage";
 import ScoresPage from "@/pages/admin/ScoresPage";
+import ScoringPage from "@/pages/admin/ScoringPage";
 import NotFound from "@/pages/NotFound";
 
 export default function App() {
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/admin/competitors/new" element={<CompetitorFormPage />} />
           <Route path="/admin/competitors/:id/edit" element={<CompetitorFormPage />} />
           <Route path="/admin/scores" element={<ScoresPage />} />
+          <Route path="/admin/scoring" element={<ScoringPage />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
         </Route>
 
