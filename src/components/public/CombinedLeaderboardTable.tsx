@@ -110,8 +110,7 @@ export default function CombinedLeaderboardTable({
 
   const sortedQualWods = [...qualifierWods].sort((a, b) => a.event_number - b.event_number);
   const sortedFinalWods = [...finalWods].sort((a, b) => a.event_number - b.event_number);
-  const qualCols = Math.max(sortedQualWods.length, 1);
-  const finalCols = Math.max(sortedFinalWods.length, 1);
+  const hasWodColumns = sortedQualWods.length + sortedFinalWods.length > 0;
 
   const handleSort = (nextKey: SortKey) => {
     setSort((prev) => {
@@ -179,7 +178,7 @@ export default function CombinedLeaderboardTable({
         <thead>
           <tr className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
             <th
-              rowSpan={2}
+              rowSpan={hasWodColumns ? 2 : 1}
               onClick={() => handleSort("position")}
               aria-sort={sort?.key === "position" ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
               className={thClass}
@@ -190,7 +189,7 @@ export default function CombinedLeaderboardTable({
               </span>
             </th>
             <th
-              rowSpan={2}
+              rowSpan={hasWodColumns ? 2 : 1}
               onClick={() => handleSort("athlete")}
               aria-sort={sort?.key === "athlete" ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
               className={thClass}
@@ -200,20 +199,16 @@ export default function CombinedLeaderboardTable({
                 {indicator("athlete")}
               </span>
             </th>
+            {hasWodColumns && (
+              <th
+                colSpan={sortedQualWods.length + sortedFinalWods.length}
+                className="border-l border-gray-200 px-4 py-3 text-center font-semibold text-gray-500"
+              >
+                Workouts
+              </th>
+            )}
             <th
-              colSpan={qualCols}
-              className="border-l border-gray-200 px-4 py-3 text-center font-semibold text-gray-500"
-            >
-              Qualifier
-            </th>
-            <th
-              colSpan={finalCols}
-              className="border-l-2 border-gray-300 px-4 py-3 text-center font-semibold text-gray-500"
-            >
-              Final
-            </th>
-            <th
-              rowSpan={2}
+              rowSpan={hasWodColumns ? 2 : 1}
               onClick={() => handleSort("total")}
               aria-sort={sort?.key === "total" ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
               className={`${thClass} text-center`}
@@ -224,42 +219,36 @@ export default function CombinedLeaderboardTable({
               </span>
             </th>
           </tr>
-          <tr className="sticky top-11 z-10 border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
-            {sortedQualWods.map((wod) => (
-              <th
-                key={wod.id}
-                onClick={() => handleSort(eventSortKey(wod))}
-                aria-sort={sort?.key === eventSortKey(wod) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-                className="cursor-pointer select-none border-l border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
-              >
-                <span className="inline-flex items-center gap-1">
-                  Score {wod.event_number}
-                  {indicator(eventSortKey(wod))}
-                </span>
-              </th>
-            ))}
-            {sortedQualWods.length === 0 && (
-              <th className="border-l border-gray-100 px-4 py-2 text-center font-medium">
-                Score
-              </th>
-            )}
-            {sortedFinalWods.map((wod) => (
-              <th
-                key={wod.id}
-                onClick={() => handleSort(eventSortKey(wod))}
-                aria-sort={sort?.key === eventSortKey(wod) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-                className="cursor-pointer select-none border-l-2 border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
-              >
-                <span className="inline-flex items-center gap-1">
-                  Score {wod.event_number}
-                  {indicator(eventSortKey(wod))}
-                </span>
-              </th>
-            ))}
-            {sortedFinalWods.length === 0 && (
-              <th className="border-l-2 border-gray-100 px-4 py-2 text-center font-medium">Score</th>
-            )}
-          </tr>
+          {hasWodColumns && (
+            <tr className="sticky top-11 z-10 border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+              {sortedQualWods.map((wod) => (
+                <th
+                  key={wod.id}
+                  onClick={() => handleSort(eventSortKey(wod))}
+                  aria-sort={sort?.key === eventSortKey(wod) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+                  className="cursor-pointer select-none border-l border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Score {wod.event_number}
+                    {indicator(eventSortKey(wod))}
+                  </span>
+                </th>
+              ))}
+              {sortedFinalWods.map((wod) => (
+                <th
+                  key={wod.id}
+                  onClick={() => handleSort(eventSortKey(wod))}
+                  aria-sort={sort?.key === eventSortKey(wod) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+                  className="cursor-pointer select-none border-l-2 border-gray-100 px-4 py-2 text-center font-medium hover:text-gray-600"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Score {wod.event_number}
+                    {indicator(eventSortKey(wod))}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          )}
         </thead>
         <tbody className="divide-y divide-gray-100">
           {sortedEntries.map((entry) => {
@@ -299,7 +288,6 @@ export default function CombinedLeaderboardTable({
                     leading={false}
                   />
                 ))}
-                {sortedQualWods.length === 0 && <WodCell result={undefined} leading={false} />}
                 {sortedFinalWods.map((wod) => (
                   <WodCell
                     key={wod.id}
@@ -307,7 +295,6 @@ export default function CombinedLeaderboardTable({
                     leading={true}
                   />
                 ))}
-                {sortedFinalWods.length === 0 && <WodCell result={undefined} leading={true} />}
                 <td className="px-5 py-3.5 text-center font-semibold text-gray-900">
                   {total(entry)}
                 </td>

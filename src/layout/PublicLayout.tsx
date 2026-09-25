@@ -31,14 +31,11 @@ export default function PublicLayout() {
 
           <nav className="flex items-center gap-1">
             <HeaderLink to="/">Inicio</HeaderLink>
-            {isAuthenticated && (
-              <HeaderLink to="/admin">Admin</HeaderLink>
-            )}
             <Link
-              to="/login"
+              to={isAuthenticated ? "/admin" : "/login"}
               className="ml-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
             >
-              {isAuthenticated ? "Mi cuenta" : "Acceder"}
+              {isAuthenticated ? "Admin" : "Acceder"}
             </Link>
           </nav>
         </div>

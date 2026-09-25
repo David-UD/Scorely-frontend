@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -193,8 +193,8 @@ describe("CompetitionDetail", () => {
     expect(screen.getByText("CrossFit")).toBeInTheDocument();
     expect(screen.getAllByText("Box El Pilar").length).toBeGreaterThan(1);
     expect(screen.getAllByText(/BsAs.*AR/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Inicio")).toBeInTheDocument();
-    expect(screen.getByText("Fin")).toBeInTheDocument();
+    expect(screen.getByText("Fecha")).toBeInTheDocument();
+    expect(screen.getByText("1 — 3 may 2026")).toBeInTheDocument();
   });
 
   it("renders the map iframe when coordinates are available", () => {
@@ -391,12 +391,13 @@ describe("CompetitionDetail", () => {
 
     renderDetail();
 
-    expect(screen.getByText("Atletas")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("Categorías")).toBeInTheDocument();
-    expect(screen.getByText("WODs")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.queryByText("Finalistas")).toBeNull();
+    const hero = within(screen.getByRole("region", { name: /información de la competición/i }));
+    expect(hero.getByText("Atletas")).toBeInTheDocument();
+    expect(hero.getByText("3")).toBeInTheDocument();
+    expect(hero.getByText("Categorías")).toBeInTheDocument();
+    expect(hero.getByText("Workouts")).toBeInTheDocument();
+    expect(hero.getByText("5")).toBeInTheDocument();
+    expect(hero.queryByText("Finalistas")).toBeNull();
   });
 
   it("shows action buttons and shares the current URL", async () => {

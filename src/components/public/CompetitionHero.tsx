@@ -19,7 +19,7 @@ function formatStat(value: number | null): string {
 const STAT_CARDS: { key: keyof CompetitionHeroProps["stats"]; label: string }[] = [
   { key: "athletes", label: "Atletas" },
   { key: "categories", label: "Categorías" },
-  { key: "wods", label: "WODs" },
+  { key: "wods", label: "Workouts" },
 ];
 
 export default function CompetitionHero({ competition, stats }: CompetitionHeroProps) {

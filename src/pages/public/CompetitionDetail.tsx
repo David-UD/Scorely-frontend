@@ -15,7 +15,7 @@ import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useEvents } from "@/hooks/useEvents";
 import { useCompetitors } from "@/hooks/useCompetitors";
 import { buildCombinedLeaderboards } from "@/utils/leaderboard";
-import { formatDateRange, formatDate } from "@/utils/format";
+import { formatDateRange } from "@/utils/format";
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -214,7 +214,7 @@ export default function CompetitionDetail() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
             <h2 className="text-lg font-semibold text-gray-900">Información general</h2>
-            <dl className="flex flex-1 flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+            <dl className="flex flex-1 flex-col justify-between divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
               {affiliation && (
                 <InfoRow
                   label="Organizador"
@@ -231,26 +231,6 @@ export default function CompetitionDetail() {
                   }
                 />
               )}
-              <InfoRow
-                label="Inicio"
-                value={formatDate(competition.start_date)}
-                icon={
-                  <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
-                  </svg>
-                }
-              />
-              <InfoRow
-                label="Fin"
-                value={formatDate(competition.end_date)}
-                icon={
-                  <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
-                  </svg>
-                }
-              />
               {location?.name && (
                 <InfoRow
                   label="Sede"
@@ -264,7 +244,7 @@ export default function CompetitionDetail() {
                 />
               )}
               <InfoRow
-                label="Fechas"
+                label="Fecha"
                 value={formatDateRange(competition.start_date, competition.end_date)}
                 icon={
                   <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

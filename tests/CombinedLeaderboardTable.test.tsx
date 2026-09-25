@@ -145,4 +145,48 @@ describe("CombinedLeaderboardTable", () => {
     expect(rows[2].className).toContain("bg-brand-25");
     expect(rows[0].className).toContain("hover:bg-gray-50");
   });
+
+  it("hides the WOD columns when the competition has no workouts", () => {
+    const [lb] = combined();
+    render(
+      <CombinedLeaderboardTable
+        title="RX"
+        entries={lb.entries}
+        qualifierWods={[]}
+        finalWods={[]}
+      />,
+    );
+    expect(screen.queryByRole("columnheader", { name: /workouts/i })).toBeNull();
+    expect(document.querySelectorAll("thead tr").length).toBe(1);
+    expect(screen.getAllByRole("columnheader").length).toBe(3);
+    expect(screen.queryByRole("columnheader", { name: /score/i })).toBeNull();
+  });
+
+  it("merges both phases under a single Workouts header", () => {
+    setup();
+    expect(screen.getByRole("columnheader", { name: /workouts/i })).toHaveAttribute(
+      "colspan",
+      "2",
+    );
+    expect(screen.queryByRole("columnheader", { name: /qualifier/i })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^final$/i })).toBeNull();
+  });
+
+  it("keeps a single phase under the Workouts header", () => {
+    const [lb] = combined();
+    render(
+      <CombinedLeaderboardTable
+        title="RX"
+        entries={lb.entries}
+        qualifierWods={wods().qualifierWods}
+        finalWods={[]}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: /workouts/i })).toHaveAttribute(
+      "colspan",
+      "1",
+    );
+    expect(screen.getByRole("columnheader", { name: /score 1/i })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /score 2/i })).toBeNull();
+  });
 });
