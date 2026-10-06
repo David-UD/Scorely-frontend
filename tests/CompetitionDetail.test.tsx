@@ -19,6 +19,7 @@ import { useEvents } from "@/hooks/useEvents";
 import { useCompetitors } from "@/hooks/useCompetitors";
 import { useCompetitionCategories } from "@/hooks/useCompetitionCategories";
 import { useEnabledCompetitionCategories } from "@/hooks/useEnabledCompetitionCategories";
+import { useAthleteProfile } from "@/hooks/useAthleteProfile";
 import type {
   Competition,
   CompetitionCategory,
@@ -48,6 +49,9 @@ vi.mock("@/hooks/useCompetitionCategories", () => ({
 vi.mock("@/hooks/useEnabledCompetitionCategories", () => ({
   useEnabledCompetitionCategories: vi.fn(),
 }));
+vi.mock("@/hooks/useAthleteProfile", () => ({
+  useAthleteProfile: vi.fn(() => ({ data: null, isLoading: false })),
+}));
 
 const mockedUseCompetition = vi.mocked(useCompetition);
 const mockedUseLeaderboard = vi.mocked(useLeaderboard);
@@ -57,6 +61,7 @@ const mockedUseCompetitionCategories = vi.mocked(useCompetitionCategories);
 const mockedUseEnabledCompetitionCategories = vi.mocked(
   useEnabledCompetitionCategories,
 );
+const mockedUseAthleteProfile = vi.mocked(useAthleteProfile);
 
 function result<T>(data: T): UseQueryResult<T> {
   return {
@@ -439,5 +444,21 @@ describe("CompetitionDetail", () => {
     expect(document.getElementById("workouts")).not.toBeNull();
     expect(document.getElementById("leaderboard")).not.toBeNull();
     expect(document.getElementById("categorias")).not.toBeNull();
+  });
+
+  it("opens the panel as a team when clicking a team entry", async () => {
+    mockedUseCompetitors.mockReturnValue(
+      result<Competitor[]>([
+        makeCompetitor({ id: 10, competitor_type: "TEAM", athlete: null, team: 7 }),
+      ]),
+    );
+    renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ana López" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Ana López" }),
+    ).toBeInTheDocument();
+    expect(mockedUseAthleteProfile).toHaveBeenCalledWith(7, "team");
   });
 });

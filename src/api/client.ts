@@ -71,7 +71,9 @@ export async function request<T>(
 
   const doFetch = (token: string | null): Promise<Response> => {
     const headers = new Headers(init.headers);
-    headers.set("Content-Type", "application/json");
+    if (!(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
     if (auth && token) {
       headers.set("Authorization", `Bearer ${token}`);
     }

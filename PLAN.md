@@ -1,25 +1,30 @@
-# PLAN — Rediseño: landing de competición (CompetitionDetail) (Parte II-M)
+# PLAN — Fotos de perfil de atleta y equipo (administración + panel público) (Parte II-N)
 
 > **Documento de planificación y seguimiento.** Implementación de la spec
-> **Parte II-M** de `PROMPT.md`: rediseño **visual** (solo UI/UX) de la vista
-> pública del detalle de competición (`/competitions/{slug}/`). No cambia
-> funcionalidad, data fetching ni modelo de datos.
+> **Parte II-N** de `PROMPT.md`: **subida de `profile_photo`** en la creación/edición de
+> atletas y equipos (`/admin/athletes`, `/admin/teams`) y su **visualización pública**
+> en el panel que se abre al **hacer click en el nombre** del leaderboard público
+> (`AthletePanel`).
 >
-> Fecha: 2026-09-24
-> Estado: **PLANIFICADO** — no se ejecutó ningún cambio todavía.
-> Spec origen: `PROMPT.md` → `# Parte II-M — Rediseño: landing de competición (CompetitionDetail)`
-> Anterior: Parte II-L (Scoring) ✅ cerrada (ver PLAN.md histórico / RESULTADOS.md).
+> Fecha: 2026-10-06
+> Estado: **EJECUTADO ✅** — implementado y verificado (typecheck/lint/test/build OK; 200 → 217 tests). Documentado en `RESULTADOS.md`.
+> Spec origen: `PROMPT.md` → `# Parte II-N — Fotos de perfil de atleta y equipo (alta/edición + panel público)`
+> Anterior: Parte II-M (Rediseño CompetitionDetail) ✅ cerrada (ver PLAN.md / RESULTADOS.md).
 
 ---
 
 ## 0. Objetivo
 
-Rediseñar la landing pública `/competitions/{slug}/` (`CompetitionDetail`) para que el
-usuario entienda en segundos **qué competición ve, cuándo/dónde ocurre, qué categorías
-tiene, cuáles son los WODs y cómo va el leaderboard**, con jerarquía visual clara,
-consistencia espacial (escala 48/24/16/12 px) y buen comportamiento en móvil (320 px+).
-**Todo con los mismos hooks, tipos, API y fixtures**: solo se re-trabajan componentes de
-presentación.
+- **Admin**: poder subir, reemplazar y quitar una foto de perfil al crear/editar atletas y
+  equipos (subida `multipart/form-data`), con preview y validación, y verla como avatar en
+  las tablas `AthletesPage`/`TeamsPage`.
+- **Público**: al hacer click en el nombre del atleta/equipo en `CombinedLeaderboardTable`,
+  `AthletePanel` muestra la **foto real + box** (con fallback a iniciales) **también sin
+  sesión**; hoy `useAthleteProfile` solo consulta con login y **solo atletas** (los equipos
+  quedan sin perfil/foto).
+- **Todo en frontend**: la subida y el panel usan los endpoints existentes. Los cambios de
+  backend que requiere la visualización pública quedan como **AVISO** (sección 8) para que
+  el usuario los aplique manualmente.
 
 ---
 
@@ -27,54 +32,39 @@ presentación.
 
 | Tema | Hallazgo / decisión |
 |---|---|
-| **SCSS vs Tailwind** | El repo **usa Tailwind v4** (tokens en `src/index.css` `@theme`, utilidades en los componentes, `cn()` en `src/utils/cn.ts`). **No existe SCSS** (no hay `.scss`, ni `sass` en `package.json`). 👉 **Se usa Tailwind v4** (patrón existente). Avisar al usuario: la consigna decía "React+Vite+SCSS" pero el repo no lo usa; no se añade SCSS sin su OK (regla de tecnologías de `PROMPT.md`). |
-| **Datos** | `Competition` ya trae `name`, `description`, `slug`, `competition_type`, `status`, `affiliation`, `year`, `start_date`/`end_date`, `location`. Events por fase (con `is_active`, `is_ascending`, `workout` multilinea). Categorías derivadas del leaderboard vía `buildCombinedLeaderboards`. Recuentos: `useCompetitors` + `useEnabledCompetitionCategories`. |
-| **Ausencia de resultado** | Se renderiza **`—`** (U+2014), nunca un valor inventado. Implica cambiar los `"-"` actuales de `CombinedLeaderboardTable` (`score()`, `total()`, `WodCell`). |
-| **Barra de progreso** | Puntos **● (activo) / ○ (inactivo)** sobre el array combinado de eventos, con `is_active` (los WODs `is_active !== false` son visibles). |
-| **Hero · "Finalistas"** | = suma de `finalist_slots` de `useEnabledCompetitionCategories`. "Atletas" = `useCompetitors` (length). "Categorías" = `categories.length`. "WODs" = eventos visibles (`is_active`). Fuentes ya cableadas (query cache deduplica con `CategoryInscritos`). |
-| **Botones de acción** | "Ver Workouts" / "Ver Leaderboard" hacen **scroll por ancla** a `id="workouts"` / `id="leaderboard"` (`scrollIntoView` con guard `?.`). "Compartir" copia la URL actual (`navigator.clipboard`) + toast. Sin endpoint nuevo. |
-| **Hero · ciudad** | `location.city` (fallback `affiliation.city`), junto a estado (badge) y tipo (badge). |
-| **Anchors/ids** | Secciones del page: `<section id="info">`, `id="workouts"`, `id="leaderboard"`, `id="categorias"` (anclas para los botones). |
+| **Subida = multipart** | DRF ya incluye `MultiPartParser` por defecto. El cliente `request()` (`src/api/client.ts:78`) **siempre** setea `Content-Type: application/json` → hay que **no forzarlo cuando `body` es `FormData`** (si no, el boundary se rompe y el backend responde 4xx). |
+| **Atleta: foto ya expuesta** | `AthleteSerializer.fields = (id, first_name, last_name, birth_date, gender, profile_photo, affiliation)` → `profile_photo` **ya llega y ya se puede escribir** por multipart. |
+| **Equipo: foto en el modelo pero NO en el serializer** | `Team.profile_photo` existe en el modelo (migración `participants.0004_team_profile_photo` ya aplicada), pero `TeamSerializer.fields = (id, name, affiliation)`. **AVISO backend**: añadir `profile_photo` al serializer, si no el frontend no puede ni subirla ni leerla. |
+| **Lectura pública** | `AthleteViewSet`/`TeamViewSet` = `IsAuthenticated` → `/athletes/{id}/` y `/teams/{id}/` **no** son públicos; `/competitors/{id}/` sí (GET, `IsAuthenticatedOrReadOnly`). **AVISO backend**: abrir lectura. Mientras tanto, `AthletePanel` degrada a **iniciales + `—`** (comportamiento actual sin sesión). |
+| **Media no servida** | `MEDIA_URL='/media/'`, `MEDIA_ROOT=BASE_DIR/'media'`, pero `config/urls.py` **no** monta `static(settings.MEDIA_URL, document_root=...)` → cualquier `/media/...` responde **404**. **AVISO backend**: sin esto la foto subida jamás carga. |
+| **URL relativa** | El serializer devuelve la ruta relativa (`/media/Athletes/...`); la SPA corre en otro origen → resolver contra el origen de `API_BASE_URL` (`resolveMediaUrl`, hoy función privada en `useAthleteProfile.ts:14`). Se mueve a `src/utils/media.ts` y se comparte (admin + público). |
+| **Payloads actuales** | `AthleteWritePayload`/`TeamWritePayload` (types) no llevan `profile_photo`; `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` (`src/api/admin.ts:273-313`) envían **JSON** → migran a **FormData**. |
+| **Público ya existente** | `AthletePanel.tsx` + `CombinedLeaderboardTable` (`onSelectAthlete`) + `CompetitionDetail` ya abren el panel al hacer click en el nombre; `athleteIdByCompetitor` mapea solo `competitor.athlete` (**equipos ignorados**) y `useAthleteProfile` está `enabled: isAuthenticated && athleteId != null`. |
+| **Diseño del campo foto** | No meter `File` en react-hook-form/zod: estado local `photoFile: File | null` + `removePhoto: boolean`, validación manual en `onChange` (tipo png/jpeg/webp, ≤ 5 MB) con banner/campo de error. Preview con `URL.createObjectURL` (revocar en cleanup). |
+| **Semántica multipart** | Editar sin tocar foto → **no** enviar la clave `profile_photo`. "Quitar foto" → enviar `profile_photo: ""` (DRF `ImageField` → `None`). Sobrescribir/alta → enviar el `File`. |
+| **Tests actuales** | Uno por página involucrada ya existe (ver §2). Suite base **200/200** (24 archivos). Las fixtures `makeAthlete`/`makeTeam` se extienden con `profile_photo`. |
 
 ---
 
 ## 2. Clave técnica (estado actual verificado)
 
-- **Página**: `src/pages/public/CompetitionDetail.tsx` (254 líneas) — estructura actual:
-  1) back link; 2) header (título + `StatusBadge` + `Badge` tipo + fechas + descripción);
-  3) `grid lg:grid-cols-2` con sección "Información general" (`<dl>`) + "Ubicación"
-  (`LocationMap`, `h-72` fijo → **no** igualan alturas); 4) `CategoryInscritos`;
-  5) "Workouts" (dos `WodList`, tabla por fase); 6) "Leaderboard" (`LeaderboardFilters`
-  + `CombinedLeaderboardTable`). Queries: `useCompetition(slug)`, `useEvents(id, phase)`,
-  `useLeaderboard(id, "final")`. Filtro por categoría en estado local.
-- **WodList** (`src/components/public/WodList.tsx`, 44 l): tabla `Nº | Workouts | Workout |
-  Descripción`, ya usa `whitespace-pre-wrap`, filtra `is_active`, `EmptyState`
-  "Sin workouts en {phase}". **Se transforma a tarjetas en el mismo archivo** (mantener
-  nombre/firma `{ phaseName, wods }` para no romper página ni tests).
-- **CombinedLeaderboardTable** (`src/components/public/CombinedLeaderboardTable.tsx`,
-  295 l): ya agrupa columnas (`rowSpan` 2 para Pos/Atleta/Total, `colSpan` group headers
-  "Qualifier"/"Final"), medallas (`MedalIcon`), sorteo, `overflow-x-auto min-w-[520px]`,
-  fila rank 1 resaltada. **Falta**: sticky header, hover en filas, podio completo (1–2–3),
-  separador visual Qualifier/Final más marcado, y `—` en vez de `-`. No cambia el contrato
-  de props ni los textos "Pos."/"Atleta"/"Score {n}"/"Total" (los tests de sorteo siguen usando
-  `getByRole("columnheader", { name: ... })`).
-- **CategoryInscritos** (`src/components/public/CategoryInscritos.tsx`, 68 l): ya **carga y pinta**
-  tarjetas `<li>` con count via `buildCategoryCounts`. Falta el **carrusel móvil**: envolver el
-  `<ul>` en contenedor `overflow-x-auto snap-x no-scrollbar` con `flex gap-3` y tarjetas
-  `snap-start` (los tests que leen `li` siguen pasando).
-- **LocationMap** (`src/components/public/LocationMap.tsx`): acepta `className`; el iframe es
-  `h-72 w-full`. Para igualar alturas: pasar `className="h-full"` y que el contenedor de la
-  tarjeta mapa sea `h-full` + el `dl` de info estire la columna. Contracto intacto.
-- **Common reutilizables**: `StatusBadge`, `Badge` (tones), `EmptyState`, `ErrorState`,
-  `Spinner`, `Tabs`, `Toast` (rol `status`). Íconos: hay SVGs inline (flechas, búsqueda);
-  no hay librería de iconos en público — los nuevos usan SVGs inline (patrón `HomeIndex`).
-- **Tests afectados**: `tests/CompetitionDetail.test.tsx` (380 l), `tests/WodList.test.tsx`
-  (38 l), `tests/CombinedLeaderboardTable.test.tsx` (130 l, usa `getAllByText("-")`),
-  `tests/CategoryInscritos.test.tsx` (162 l). Helpers: `renderWithProviders` +
-  `result<T>` (patrón mock de hooks). Fixtures: `makeWod`, `makeEventResult`,
-  `makeLeaderboard`, `makeEnabledCompetitionCategory`, `makeCompetitor`.
-- **Verificación**: `npm run typecheck`, `npm run lint` (0 errores; 1 warning preexistente
-  `SidebarContext.tsx`), `npm run test` (hoy **191/191**, 24 archivos), `npm run build`.
+- **Cliente**: `src/api/client.ts` — `request<T>(path, options)` (línea 66). `RequestOptions` extiende `RequestInit` (body tipado por TS). `doFetch` arma `Headers` y setea `Content-Type` (línea 74). Cambios: construir `Headers` solo con lo que no sea `FormData`; `Content-Type` solo si `body` no es `FormData`.
+- **API admin**: `src/api/admin.ts`
+  - `fetchCatalog<T>(path)` (helper de listas, JWT).
+  - `fetchAthlete(id)` (`req JWT`), `fetchTeam(id)` (JWT) — usados en admin y en `useAthleteProfile` (público).
+  - `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` → FormData.
+- **Formularios**:
+  - `src/pages/admin/AthleteFormPage.tsx` (388 l): schema zod (`first_name`,`last_name`,`birth_date`,`gender`), bloque "Inscribir en competición (opcional)", `onSubmit` arma `AthleteWritePayload` y llama `updateMutation`/`createMutation` (+ `createCompetitor` si inscribe). Archivo donde se precarga con `reset()` al editar (efecto sobre `detailQuery.data`).
+  - `src/pages/admin/TeamFormPage.tsx` (320 l): schema `name`, mismo patrón de inscripción.
+- **Tablas admin**: `AthletesPage.tsx` y `TeamsPage.tsx` — columna "Atleta"/"Equipo" como `<td>` con nombre plano (línea 126-128 y 130-131); ahí se añade el avatar (img + fallback iniciales).
+- **Hooks admin**: `src/hooks/useAdminModules.ts` — `useAdminAthletes`, `useAdminTeams`, `useCreateAthlete`, `useUpdateAthlete`, `useCreateTeam`, `useUpdateTeam`. `mutationFn` apunta directo a la función api → **no cambian sus firmas** (payload con `profile_photo` fluye solo).
+- **Público**:
+  - `src/pages/public/CompetitionDetail.tsx` (396 l): `athleteIdByCompetitor` (línea 108-114) usa `useCompetitors(id)`; `onSelectAthlete={setSelectedAthlete}` (375); `AthletePanel` (387-393) con `athleteId={athleteIdByCompetitor.get(...) ?? null}`. Tipos: `Competitor` trae `athlete?: number|null` y `team?: number|null`.
+  - `src/components/public/AthletePanel.tsx` (144 l): props `{ entry, athleteId, onClose }`; usa `useAthleteProfile(athleteId)`; ya renderiza `img` (línea 96-101) o iniciales (103-105); campo "Box de origen" + Puntos + Posición.
+  - `src/hooks/useAthleteProfile.ts` (42 l): `AtheleteProfile { firstName, lastName, photoUrl, box }`; resuelve `photoUrl` con `resolveMediaUrl` (privado) y `box` con `fetchAffiliation`. `enabled: isAuthenticated && athleteId != null`.
+- **Tipos/DTOs**: `src/types/index.ts` — `Athlete.profile_photo?: string|null` (línea 154, **ya existe**); `Team` (166-170) **sin** `profile_photo`; `AthleteWritePayload` (158-164) y `TeamWritePayload` (172-175) sin `profile_photo`.
+- **Fixtures (tests)**: `tests/fixtures.ts` — `makeAthlete` (108-119, `profile_photo: null`), `makeTeam` (121-128, sin `profile_photo`).
+- **Verificación**: `npm run typecheck`, `npm run lint` (0 errores; 1 warning preexistente `SidebarContext.tsx`), `npm run test` (**200/200**, 24 archivos), `npm run build`.
 
 ---
 
@@ -82,173 +72,118 @@ presentación.
 
 ### Paso 0 — Registrar inicio
 
-- Añadir sección **"Paso 37 — Parte II-M: Rediseño landing de competición"** a `Process.md`
+- Añadir sección **"Paso 38 — Parte II-N: Fotos de perfil de atleta y equipo"** a `Process.md`
   (inicio, plan resumido y lista de pasos).
 
-### Paso 1 — `src/components/public/CompetitionHero.tsx` (NUEVO)
+### Paso 1 — `src/utils/media.ts` (NUEVO)
 
-Componente de presentación. Props:
-`{ competition: Competition; stats: { athletes: number | null; categories: number; wods: number; finalists: number | null } }`.
+Mover `resolveMediaUrl()` desde `useAthleteProfile.ts` a util compartido (convención: named export, carpeta `utils`, patrón `utils/leaderboard.ts`):
 
-- Layout responsive:
-  - Nombre `text-title-lg`→`text-title-md` móvil (hoy `text-title-lg` 48px/60px, muy grande
-    para móvil), semibold, `text-gray-900`, con `StatusBadge` (status) + `Badge` ("brand",
-    `competition_type.name`) en fila de badges.
-  - Subtítulo: ciudad (`location?.city ?? affiliation.city`) + `formatDateRange(start,end)` +
-    año (`· {year}`) en `text-gray-500`.
-  - Descripción (`max-w-3xl`, `text-sm`, `line-clamp-3` desktop, opcional).
-  - **Tarjetas de métricas**: `grid grid-cols-2 gap-3 sm:grid-cols-4`; cada una
-    `rounded-xl border border-gray-200 bg-white p-4 shadow-theme-xs`:
-    - Valor grande (número o `—` si `null`) + label chico: **Atletas**, **Categorías**,
-      **WODs**, **Finalistas**.
-  - Aire con el resto: el bloque entero actúa como hero (padding, fondo opcional
-    `bg-white`), se usa dentro de `CompetitionDetail` con `gap-12` (48px) de espaciado.
-- Sin lógica: recibe datos calculados desde la página.
+- `mathced`… no: exactamente el cuerpo actual (detectar `http(s)://`; si no, anteponer el origen de `API_BASE_URL` sin el sufijo `/api/v\d*`).
+- Export `resolveMediaUrl(url: string | null | undefined): string | null`.
+- `useAthleteProfile.ts` pasa a importarla desde `@/utils/media` (eliminar la copia privada).
 
-### Paso 2 — `src/components/public/LocationMap.tsx` (MINI cambio)
+### Paso 2 — `src/types/index.ts`
 
-- El iframe debe poder rellenar la altura de su tarjeta: además del `h-72` por defecto,
-  aceptar `className="h-full"` (ya lo propaga). Cambio: en el `div` contenedor de la tarjeta,
-  permitir estirarlo cuando lo use el grid (`className` en el wrapper) para igualar con la
-  tarjeta de información. **No romper** uso en otros lados (no hay otros usos: solo
-  `CompetitionDetail`).
+- `Team`: añadir `profile_photo?: string | null`.
+- `AthleteWritePayload`: añadir `profile_photo?: File | null`.
+- `TeamWritePayload`: añadir `profile_photo?: File | null`.
+- Revisar si hay tipos derivados en otros archivos (no se esperan).
 
-### Paso 3 — `src/pages/public/CompetitionDetail.tsx` (orquestación principal)
+### Paso 3 — `src/api/client.ts` (soporte FormData)
 
-Mantener el contrato externo (ruta, hooks, filtros). Reorganizar el `return`:
+En `doFetch` (línea 72-79):
 
-1. **Back link** (igual).
-2. `<section id="info">` → `<CompetitionHero ... />` con stats calculadas:
-   - `athletes = useCompetitors(id).data?.length ?? null`
-   - `categories = categories.length`
-   - `wods = [...qualifierWods, ...finalWods].filter(w => w.is_active !== false).length`
-   - `finalists = enabledQuery.data?.reduce((acc, c) => acc + c.finalist_slots, 0) ?? null`
-   - Nuevos hooks en la página: `useCompetitors(id)`, `useEnabledCompetitionCategories(id)`
-     (mismas keys que `CategoryInscritos` → cache compartida, **sin doble fetch**).
-3. **Action bar** (botones): "Ver Workouts" → `#workouts`, "Ver Leaderboard" → `#leaderboard`,
-   "Compartir" → `navigator.clipboard.writeText(window.location.href)` + `Toast` de éxito
-   ("Enlace copiado."). Estilo: botones `rounded-lg border bg-white px-4 py-2 text-sm
-   font-medium shadow-sm` — botón principal "brand" (`bg-brand-500 text-white`). `gap-6`.
-   (Puede ser un subcomponente en el mismo archivo o `ActionBar` pequeño inline.)
-4. **Info + Mapa con alturas iguales**: `grid grid-cols-1 gap-6 lg:grid-cols-2`, ambas
-   columnas `h-full`; tarjeta "Información general" (`<dl>`) con **iconos** en los rows
-   (Organizador / Inicio / Fin / Sede): SVGs inline `size-4 text-gray-400` a la izquierda
-   del `dt` (patrón `HomeIndex`). Tarjeta "Ubicación" con `LocationMap className="h-full"`.
-   Estructura de tarjeta armonizada: `rounded-xl border border-gray-200 bg-white p-6`
-   (espaciado interno **16px→24px**: usar `gap-4`, `p-6`).
-5. `<section id="categorias">` → `CategoryInscritos` (sin cambios de props).
-6. `<section id="workouts">` → dos `<WodList phaseName="Qualifier" wods={...} />` y
-   `phaseName="Final"` (ya transformados a tarjetas) + **barra de progreso** (ver Paso 5)
-   y estado carga/error/vacío igual al actual.
-7. `<section id="leaderboard">` → `LeaderboardFilters` + `CombinedLeaderboardTable` (igual
-   props) + estados.
-8. **Escala de espaciado**: contenedor raíz `flex flex-col gap-12` (secciones 48px);
-   tarjetas `p-6`/`gap-4` (internos 16px); filas `gap-3` (12px). Ajustar `gap-8` (32px)
-   actual → `gap-12` (48px).
+- Si `init.body instanceof FormData` → **no** llamar `headers.set("Content-Type","application/json")` ni setearlo (el navegador añade `multipart/form-data; boundary=...`).
+- El resto del flujo (Bearer si `auth && token`, refresh 401, `ApiError`) **sin cambios**.
 
-### Paso 4 — `src/components/public/WodList.tsx` → tarjetas de Workout (REDISEÑO)
+### Paso 4 — `src/api/admin.ts` (multipart + variantes públicas)
 
-Mismo archivo y firma `({ phaseName, wods })`. Cambiar la **tabla por tarjetas**:
+- Helper privado `formDataFromPayload(payload, photo: File | null | undefined, removePhoto: boolean): FormData` (o inline en cada función): agrega cada campo de texto y, según estado de la foto:
+  - archivo → `fd.append("profile_photo", file)`
+  - "quitar foto" → `fd.append("profile_photo", "")`
+  - sin cambios → **no** incluir la clave.
+- `createAthlete(payload)`: `POST "/athletes/"` con `body: FormData` (no JSON).
+- `updateAthlete(payload)`: `PATCH` con `FormData`; conservar `payload.id`.
+- `createTeam(payload)` / `updateTeam(payload)`: ídem `POST/PATCH "/teams/"`.
+- Nuevas funciones **públicas** para el panel sin sesión (no cambiar las existentes, que usan los admin):
+  - `fetchAthletePublic(id)`: `request<Athlete>("/athletes/{id}/", { auth: false })`.
+  - `fetchTeamPublic(id)`: `request<Team>("/teams/{id}/", { auth: false })`.
+- `fetchAffiliation` se reutiliza para el box; si se decide leerlo público, añadir `fetchAffiliationPublic(id)` con `auth: false` (opcional, mismo patrón).
 
-- Contenedor `flex flex-col gap-4` (o `grid grid-cols-1`).
-- Cada WOD visible (`is_active !== false`) → tarjeta
-  `rounded-xl border border-gray-200 bg-white p-6 shadow-theme-xs` con:
-  - Cabecera: **"WOD {event_number}"** (semibold) + nombre (mediano) + **badge de fase**:
-    `phaseName === "Final"` → `Badge tone="success"` "Final"; sino `Badge tone="brand"` o
-    neutral con "Qualifier" (el badge lo diferencia, no otra tabla).
-  - **Tipo de puntuación**: `is_ascending ? "Mayor resultado gana" : "Menor tiempo gana"`
-    (etiqueta `text-xs text-gray-400`, o `Badge` monocroma).
-  - `workout` con `whitespace-pre-wrap` (salto de línea conservado, patrón actual
-    `whitespace-pre-wrap`) — `text-sm text-gray-800`.
-  - `description` (si existe) `whitespace-pre-wrap text-sm text-gray-500`.
-- `EmptyState` "Sin workouts en {phase}" (texto actual, no romper test).
-- Móvil: tarjetas apiladas (grid 1 col); sin tabla → **no requiere scroll horizontal**.
-- Los tests de `WodList.test.tsx` siguen pasando (asserts por texto, no por `<table>`).
-- Verificar import en `CompetitionDetail` (sin cambios).
+### Paso 5 — `src/pages/admin/AthleteFormPage.tsx` (campo de foto)
 
-### Paso 5 — Barra de progreso de eventos (en `CompetitionDetail` o componente mínimo)
+- Estado local: `photoFile: File | null`, `removePhoto: boolean`, `photoError: string | null`.
+- Validación en `onChange` del input `type="file"` `accept="image/png,image/jpeg,image/webp"`: tipo permitido y ≤ 5 MB (mensaje en `photoError`/campo con `role="alert"`), **no emitir petición** si inválido.
+- Preview: `URL.createObjectURL(photoFile)` en un `useMemo`/`useState`; si no hay archivo nuevo pero existe `detailQuery.data.profile_photo`, mostrar esa URL (resuelta con `resolveMediaUrl`); si `removePhoto`, mostrar placeholder.
+- Botón "Quitar foto" (solo edición y/o cuando hay foto) que setea `removePhoto=true` y limpia el input; botón para re-seleccionar.
+- `onSubmit`: construir payload `{ ...campos, profile_photo: photoFile }`; si `removePhoto` → `profile_photo: ""` (en FormData) para limpiar; conservar el resto del flujo (inscripción opcional, navegación, banner de error).
+- Cleanup: `revokeObjectURL` del preview al desmontar.
+- Bloque visual ubicado antes de "Inscribir en competición" (o tras sexo), estilo TailAdmin (uso de `inputClassName`/`labelClassName` existentes).
 
-- Datos: `allWods = useMemo(() => [...qualifierWods, ...finalWods], [...])`, y para cada uno
-  `active = wod.is_active !== false`.
-- Render (dentro de la sección Workouts, tras el `h2`, antes de las tarjetas):
-  - Cabecera pequeña "Progreso" (`text-sm font-medium text-gray-600`) y fila de puntos:
-    cada WOD → `<span aria-hidden>` **●** (activo) con `text-brand-500` / **○** (inactivo)
-    con `text-gray-300`; dentro de un contenedor con `aria-label` como
-    `"3 de 5 eventos activos"` (accesible/testeable).
-  - El número total de puntos = eventos visibles+inactivos (todos los cargados), como en la
-    spec (● activo, ○ inactivo).
-- Opcional: si hay contenedor `gap-2` entre puntos; al hacer hover (`group-hover`) nada.
+### Paso 6 — `src/pages/admin/TeamFormPage.tsx` (campo de foto)
 
-### Paso 6 — `src/components/public/CombinedLeaderboardTable.tsx` (MEJORAS)
+- Mismo patrón que Paso 5 pero con `name` y `detailQuery.data.profile_photo` (una vez que el backend exponga el campo en `Team`; mientras, el preview de edición no tendrá foto previa → solo upload inicial).
 
-Sin cambiar props ni nombres de columna:
+### Paso 7 — `src/pages/admin/AthletesPage.tsx` y `TeamsPage.tsx` (avatar en tabla)
 
-1. **`—` en vez de `-`** para ausencia: `score()` → `String(value) ?? "—"` (cuidado con
-   `0`/`""`), `total()` → `entry.qualified ? String(...) : "—"`, y el cierre de `WodCell`
-   sin datos → `"—"` y el `enrich()` default → `"—"`. **Actualizar tests** que usan `"-"`.
-2. **Sticky header**: en `<thead>` / filas de encabezado → `sticky top-0 z-10` con fondo ya
-   `bg-gray-50` (agregar `shadow-sm` o `border-b`). El contenedor `overflow-x-auto` lo
-   permite dentro de la vista vertical.
-3. **Hover en filas**: `tbody tr: hover:bg-gray-50` (transición).
-4. **Podio resaltado**: además del rank 1 actual (`bg-brand-25/60`), resaltar ranks 1–3
-   (`bg-brand-25/40` rank2, `bg-brand-25/30` rank3, o bien mantener solo 1 con medalla):
-   **decisión**: resaltar las 3 con `bg-brand-25/x` decreciente y el badge circular de rank
-   con `bg-brand-500` (1) / `bg-gray-100` con texto (2–3).
-5. **Separador Qualifier/Final más marcado**: en la fila de encabezados  
-   `border-l-2 border-gray-300` (o `border-l border-gray-200` + `bg-gray-100` en el group
-   header "Final") y en celdas: `border-l border-gray-100` → `border-l-2` para la primera
-   col del grupo Final.
-6. Mantener: sorteo (flechas ↕/▲/▼, `aria-sort`), medallas (`MedalIcon`), `min-w-[520px]`
-   + `overflow-x-auto` (scroll horizontal móvil), `aria-sort`, EmptyState.
+- En la columna Nombre (líneas 126-128 y 130-131): `<div className="flex items-center gap-3">` con:
+  - si `profile_photo` → `<img src={resolveMediaUrl(...)} alt={name} className="size-8 rounded-full object-cover" />`
+  - si no → span con **iniciales** (mini helper `initials(name)` — ya existe en `AthletePanel`, mover a `src/utils/` o reutilizar localmente, sin duplicar lógica).
+- Mantener orden/búsqueda igual (el sorteo sigue por nombre).
 
-### Paso 7 — `src/components/public/CategoryInscritos.tsx` (carrusel móvil)
+### Paso 8 — `src/hooks/useAthleteProfile.ts` (público + equipos)
 
-- Envolver el `<ul ...>` actual en un div:
-  `overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth` (+ `-mx-4 px-4`
-  opcional para permitir scroll a borde).
-- El `<ul>` pasa a `flex w-max gap-3` (en móvil) y `sm:grid sm:grid-cols-2 lg:grid-cols-4
-  sm:w-auto` (desktop mantiene la grilla). Tarjetas `li` con `snap-start shrink-0 w-full
-  sm:w-auto`.
-- Mantener `li` para los tests de orden; mantener Badge con "N inscrito(s)".
-- Desktop: sin carrusel (grilla estática). Móvil ≤640px: carrusel horizontal.
+- Generalizar a **participante**: aceptar `participantId: number | null` + `participantType: "athlete" | "team"` (o dos hooks; se prefiere unificar con un tipo `ParticipantKind`).
+- `enabled: participantId != null` (**sin** condición de auth) para consultar también anónimo.
+- queryFn: según tipo → `fetchAthletePublic` o `fetchTeamPublic`; `photoUrl = resolveMediaUrl(profile_photo)`; `box` vía `fetchAffiliation` (auth: falsa o JWT decidida en Paso 4; mientras el endpoint no sea público, degradar a `null`).
+- Mantener la shape `AthleteProfile` (renombrar a `ParticipantProfile` internamente si se unifica; los tests actuales del panel mockean el hook → ajustar mock si cambia el nombre/firma).
+- Invalidar `["athlete-profile", ...]` cuando corresponda (no crítico; `staleTime` corto).
 
-### Paso 8 — Tests (actualizar + nuevos)
+### Paso 9 — `src/pages/public/CompetitionDetail.tsx` (mapeo de equipos)
 
-- **`tests/CombinedLeaderboardTable.test.tsx`**:
-  - Cambiar `getAllByText("-")` → `getAllByText("—")`.
-  - Añadir: header sticky (`container.querySelector("thead th")` con clase `sticky`), hover
-    (`tbody tr` con clase de hover), podio ranks 1–3 resaltados (aserciones por clase/`data`).
-- **`tests/WodList.test.tsx`**: añadir caso de **badge de fase "Final"** (Badge texto "Final"
-  presente) y **"Menor tiempo gana"/"Mayor resultado gana"** según `is_ascending` + caso de
-  **card en vez de tabla** (assert h/div con "WOD 1", no `role="table"`).
-- **`tests/CategoryInscritos.test.tsx`**: añadir caso contenedor de carrusel en móvil
-  (clase `overflow-x-auto` en el wrapper) — los casos actuales sin cambios.
-- **`tests/CompetitionDetail.test.tsx`**:
-  - Ajustar asserts de `"-"` → `"—"` (test "renders unified leaderboard…").
-  - Actualizar título de "renders WODs in a table per phase" → "…per phase as cards".
-  - Nuevos casos: hero muestra Atletas/Categorías/WODs/Finalistas (con números); botones de
-    acción presentes; "Compartir" copia URL (mock `navigator.clipboard`) y muestra Toast;
-    barra de progreso (aria-label "3 de 5 eventos activos" con `makeWod({is_active:false})`);
-    secciones con `id` "workouts"/"leaderboard"; stats null → "—" (sin datos).
-- Suite esperada: **191 actuales ± cambios ≈ 195–200** (neto de renombres y añadidos).
+- Añadir `teamIdByCompetitor` (espejo de `athleteIdByCompetitor`, línea 108-114): `if (competitor.team != null) map.set(competitor.id, competitor.team)`.
+- Al renderizar `AthletePanel`, pasar también el tipo: `participantType={athleteId ? "athlete" : "team"}` y `participantId` (athlete si existe, si no team de la entry); si ninguno → `null`/omiso (comportamiento actual).
+- La selección (`onSelectAthlete`) **no cambia**: la entry ya trae `competitor_id`.
 
-### Paso 9 — Verificación
+### Paso 10 — `src/components/public/AthletePanel.tsx` (tipo de participante)
+
+- Props: añadir `participantType?: "athlete" | "team"` (default `"athlete"` para no romper usos/tests) o recibir `participantId` en vez de `athleteId` (renombrado).
+- `useAthleteProfile(participantId, participantType)`.
+- Sin cambios de maquetado: `img`/iniciales/Box de origen/Puntos/Posición igual.
+
+### Paso 11 — Tests (actualizar + nuevos)
+
+- `tests/fixtures.ts`:
+  - `makeTeam`: añadir `profile_photo: null`.
+  - (opcional) helper `makeFile()` para `File` fake en formularios.
+- `tests/adminApi.test.ts`: casos para `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam`:
+  - con `FormData` (el `body` de fetch es `instanceof FormData` y **no** incluye `Content-Type: application/json` en headers);
+  - `profile_photo` presente como `File`; ausente en edición sin cambio; `""` cuando "quitar foto";
+  - nuevas `fetchAthletePublic`/`fetchTeamPublic` llaman con `auth: false` (sin header Authorization).
+- `tests/AthleteFormPage.test.tsx`: seleccionar archivo → preview; archivo inválido (>5 MB / tipo) → error, sin submit; "Quitar foto" → payload de limpieza; submit incluye `profile_photo`.
+- `tests/TeamFormPage.test.tsx`: ídem para equipo.
+- `tests/AthletesPage.test.tsx` / `tests/TeamsPage.test.tsx`: avatar con foto (img con `alt`) y fallback iniciales sin foto.
+- `tests/AthletePanel.test.tsx`: ajustar mock del hook a la nueva firma; caso **equipo** (tipo team, foto + box); caso **sin sesión/fallback** (photo null → iniciales, sin `img`).
+- `tests/CompetitionDetail.test.tsx`: caso "click en nombre de un equipo abre el panel con tipo team" (mock de `useCompetitors` con `makeCompetitor({ competitor_type: "TEAM", team: 20, athlete: null })`).
+- Suite esperada: **200 actuales ± cambios ≈ 205–212** (renombres + añadidos).
+
+### Paso 12 — Verificación
 
 1. `npm run typecheck` → sin errores.
 2. `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
-3. `npm run test` → suite completa en verde (≈195–200).
+3. `npm run test` → suite completa en verde (≈205–212).
 4. `npm run build` → OK (warning chunk >500 kB preexistente).
 
-### Paso 10 — Verificación manual + documentación
+### Paso 13 — Verificación manual + documentación
 
-- Manual (usuario): abrir `/competitions/{slug}/` en desktop (320 px con DevTools):
-  hero con métricas, badges y ciudad; info/mapa a la misma altura; categorías en carrusel
-  en móvil; WODs en tarjetas con badge de fase, puntuación y `pre-wrap`; leaderboard con
-  header sticky, hover, podio, separador Qualifier/Final y `—` en ausencias; barra de
-  progreso ●/○; botones Ver Workouts/Ver Leaderboard (scroll) y Compartir (clipboard+toast).
-- La página es Solo lectura → verificar en móvil real opcional.
-- `Process.md`: cerrar Paso 37. `RESULTADOS.md`: iteración Parte II-M con verificación.
+- Manual (usuario): crear/editar atleta y equipo con foto (subida multipart, preview, quitar);
+  tablas admin con avatar; en `/competitions/{slug}/` hacer click en nombre de un **atleta** y de un
+  **equipo** → panel muestra foto + box (con backend abierto) o iniciales (degradación).
+- `Process.md`: cerrar Paso 38. `RESULTADOS.md`: iteración Parte II-N con verificación.
 - `PLAN.md`: marcar pasos ✅.
+- **Avisar al usuario los 3 cambios backend pendientes** (sección 8) para que la foto sea
+  subible en equipos (serializer), visible en público (lectura AllowAny) y cargable (`/media/`).
 
 ---
 
@@ -256,17 +191,24 @@ Sin cambiar props ni nombres de columna:
 
 | Paso | Estado |
 |---|---|
-| 0. Registrar inicio en `Process.md` (Paso 37) | ✅ hecho |
-| 1. `CompetitionHero.tsx` (hero + métricas) | ✅ hecho |
-| 2. `LocationMap` `h-full` (igualar alturas) | ✅ hecho |
-| 3. `CompetitionDetail.tsx` (orquestación, stats, action bar, ids, gap-12) | ✅ hecho |
-| 4. `WodList.tsx` → tarjetas con badge fase y puntuación | ✅ hecho |
-| 5. Barra de progreso (●/○ por `is_active`) | ✅ hecho |
-| 6. `CombinedLeaderboardTable` (sticky, hover, podio, separador, `—`) | ✅ hecho |
-| 7. `CategoryInscritos` (carrusel móvil) | ✅ hecho |
-| 8. Tests (4 archivos afectados + casos nuevos) | ✅ hecho |
-| 9. Verificación (typecheck, lint, test, build) | ✅ hecho (200/200; build OK) |
-| 10. Documentar en `Process.md`/`RESULTADOS.md` | ✅ hecho |
+| 0. Registrar inicio en `Process.md` (Paso 38) | ✅ hecho |
+| 1. `src/utils/media.ts` (`resolveMediaUrl` compartido) | ✅ hecho |
+| 2. `src/types/index.ts` (`Team.profile_photo`, WritePayload con `File`) | ✅ hecho |
+| 3. `src/api/client.ts` (no forzar Content-Type con FormData) | ✅ hecho |
+| 4. `src/api/admin.ts` (multipart + `fetchAthletePublic`/`fetchTeamPublic`) | ✅ hecho |
+| 5. `AthleteFormPage.tsx` (campo foto + preview + quitar + validación) | ✅ hecho |
+| 6. `TeamFormPage.tsx` (ídem) | ✅ hecho |
+| 7. `AthletesPage.tsx` / `TeamsPage.tsx` (avatar en tabla) | ✅ hecho |
+| 8. `useAthleteProfile.ts` (público, equipo, `auth: false`) | ✅ hecho |
+| 9. `CompetitionDetail.tsx` (mapeo team → panel tipo team) | ✅ hecho |
+| 10. `AthletePanel.tsx` (participante atleta/equipo) | ✅ hecho |
+| 11. Tests (fixtures, adminApi, forms, pages, panel, detail) | ✅ hecho (200 → 217) |
+| 12. Verificación (typecheck, lint, test, build) | ✅ hecho |
+| 13. Documentar en `Process.md`/`RESULTADOS.md` + avisos backend | ✅ hecho (backend en `RESULTADOS.md`) |
+
+> Nota: durante la ejecución se añadieron `src/utils/initials.ts` y
+> `src/components/common/Avatar.tsx` (helper de iniciales compartido y avatar con fallback), y
+> `fetchAffiliationPublic` para que el panel público resuelva el box sin JWT.
 
 ---
 
@@ -274,36 +216,32 @@ Sin cambiar props ni nombres de columna:
 
 - [x] `npm run typecheck` → sin errores.
 - [x] `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
-- [x] `npm run test` → suite completa en verde (**200/200**, 24 archivos; base 191 → 200).
+- [x] `npm run test` → 217/217 en verde (25 archivos).
 - [x] `npm run build` → OK.
-- [x] Hero: nombre, badges (estado/tipo), ciudad, fechas y 4 tarjetas de métricas (con `—`
-      cuando no hay dato).
-- [x] Info General + Mapa: **misma altura exacta**, mapa `h-full`, iconos en rows, `p-6`.
-- [x] Mapa sin coords → `EmptyState` "Mapa no disponible" (comportamiento actual).
-- [x] Categorías: tarjetas con nombre + "N inscrito(s)"; carrusel horizontal ≤640px.
-- [x] Workouts: tarjeta por WOD con "WOD N", nombre, badge `Final`/`Qualifier`, puntuación
-      ("Menor tiempo gana"/"Mayor resultado gana"), `workout` con `pre-wrap`.
-- [x] Progreso: puntos ●/○ según `is_active`, con `aria-label` "N de M eventos activos".
-- [x] Leaderboard: header sticky (2 filas), hover filas, podio 1–3, separador Qualifier/Final
-      (`border-l-2`), `—` para ausencias, scroll horizontal móvil; sorteo sin cambios.
-- [x] Acciones: Ver Workouts/Ver Leaderboard (ancla), Compartir (clipboard + toast).
-- [x] Espaciado: secciones `gap-12` (48px) / tarjetas `p-6` (24px) / interno `gap-4` (16px) /
-      filas `gap-3` (12px); responsive 320px+.
+- [x] Alta/edición de atleta con foto → `POST/PATCH /athletes/` como `multipart/form-data`.
+- [x] Alta/edición de equipo con foto → `POST/PATCH /teams/` como `multipart/form-data`.
+- [x] Editar sin tocar foto → no se envía `profile_photo` (la foto se conserva).
+- [x] "Quitar foto" → se envía `profile_photo: ""` (el backend limpia).
+- [x] Validación: >5 MB o tipo no soportado → mensaje de error, no se emite petición.
+- [x] `request()` con `FormData` → sin `Content-Type` manual (boundary del navegador).
+- [x] Avatares en `/admin/athletes` y `/admin/teams` (foto o iniciales).
+- [x] Panel público sin sesión: click en nombre → `auth: false`, muestra foto/box o iniciales.
+- [x] Click en nombre de un **equipo** → panel con foto del equipo.
+- [x] Sin regresiones en la suite ni en los públicos existentes.
+- [x] Avisos backend comunicados al usuario (serializer `Team`, lectura pública, `/media/`).
 
 ---
 
 ## 6. Fuera de alcance
 
-- **Backend**: sin tocar. No se agregan endpoints para "Compartir" (usa clipboard+URL).
-- **Modelo de datos / hooks / API / fixtures**: sin cambios (contracciones sin cambiar
-  contratos). No se modifica `buildCombinedLeaderboards`.
-- **`WodList` no cambia de nombre** (evita ripple de imports/tests); se reforma en place.
-- **No se usa SCSS**: Tailwind v4 (el repo no trae SCSS). Si el usuario exige SCSS, es una
-  adición de dependencia → requiere su OK previo.
-- **Otros públicos**: solo `/competitions/{slug}/`. `HomeIndex`, `CompetitionCard` y `Tabs`
-  no se tocan.
-- Sin cambio de textos de sección usados en tests: "Workouts", "Leaderboard",
-  "Categorías e inscritos", "Sin eventos", "Sin workouts en {phase}", etc.
+- **Backend**: sin tocar desde el frontend. Los 3 avisos (sección 8) los aplica el usuario.
+- **Cropper/compresión de imagen** en cliente (se sube el archivo tal cual).
+- **Galería/listado público de atletas** ni página de perfil propia: la foto pública solo se ve
+  en `AthletePanel` (click en el nombre del leaderboard) y como avatar en el admin.
+- **`TeamMember`/roster** y foto en `Competitor` (no se tocan).
+- **`aufiliation` en `AthleteWritePayload`**: no se añade en esta iteración (aviso dentro de la
+  spec como follow-up opcional).
+- **Hombre de sala de unión**: no se generaliza el panel a otros públicos más allá del leaderboard.
 
 ---
 
@@ -314,6 +252,23 @@ Sin cambiar props ni nombres de columna:
 - **NO** ejecutar comandos del backend.
 - Sin comentarios en código salvo que se soliciten.
 - Textos en español; tema claro; sin i18n; sin `any`; accesibilidad (roles, `aria-label`,
-  `aria-sort`) mantenida.
-- Sin emojis salvo ●/○ (espec) y medallas ya existentes (`MedalIcon`).
+  `aria-sort`, `alt` en imágenes) mantenida.
+- Sin emojis excepto los ya existentes (iniciales = texto, no emoji).
 - Fixtures solo en `tests/`; sin mock de datos en producción.
+
+---
+
+## 8. AVISOS BACKEND (los aplica el usuario, no el agente)
+
+1. **`TeamSerializer` sin foto**: en `leader\Scorely/apps/participants/serializers.py`,
+   `TeamSerializer.Meta.fields` = `('id', 'name', 'affiliation')` → falta `'profile_photo'`
+   (el modelo ya lo tiene, migración `0004` aplicada). Sin este cambio no se puede subir/leer
+   la foto del equipo.
+2. **Lectura pública del perfil**: `AthleteViewSet`/`TeamViewSet` usan `IsAuthenticated` →
+   `/athletes/{id}/`, `/teams/{id}/` y `/affiliations/{id}/` no están disponibles para el panel
+   sin sesión. Abrir la lectura (`AllowAny`/`IsAuthenticatedOrReadOnly`) para que la foto + box
+   se vean en público. Mientras tanto el panel degrada a iniciales + `—`.
+3. **Media no servida**: `config/urls.py` no monta
+   `+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)` en modo dev → toda URL
+   `/media/...` responde **404** (en prod depende del storage/CDN). Sin este cambio la foto se
+   sube pero no carga.

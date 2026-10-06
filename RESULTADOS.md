@@ -799,6 +799,67 @@ Sin cambios de backend.
 
 ---
 
+## Iteración 2026-10-06 — Parte II-N: fotos de perfil de atleta y equipo (alta/edición + panel público)
+
+### Qué se implementó
+
+| Funcionalidad | Estado |
+|---|---|
+| Subida de `profile_photo` en alta/edición de atleta (`/admin/athletes/new|:id/edit`) | Hecho |
+| Subida de `profile_photo` en alta/edición de equipo (`/admin/teams/new|:id/edit`) | Hecho |
+| Envío `multipart/form-data` (cliente no fuerza `Content-Type`, DRF `MultiPartParser`) | Hecho |
+| Avatar en tablas admin de atletas y equipos (con fallback a iniciales) | Hecho |
+| Panel público (`AthletePanel`) muestra la foto también **sin sesión** (`auth: false`) | Hecho |
+| Panel público soporta **equipos** además de atletas | Hecho |
+| Helper compartido `resolveMediaUrl()` (admin + público) | Hecho |
+| Validación cliente de foto (PNG/JPG/WebP, ≤ 5 MB) + preview + "Quitar foto" | Hecho |
+| Tests Vitest + RTL: **200 → 217** (+17) | Hecho |
+
+### Archivos nuevos
+
+- `src/utils/media.ts`: `resolveMediaUrl(url)` (movido desde `useAthleteProfile.ts`, origen = `API_BASE_URL` sin sufijo `/api/vN`; URLs absolutas se devuelven tal cual).
+- `src/utils/initials.ts`: `initials(name)` (2 iniciales en mayúsculas) compartido por avatar, panel y formularios.
+- `src/components/common/Avatar.tsx`: avatar circular con `resolveMediaUrl` + fallback a iniciales y `onError` (si `/media/` aún responde 404, cae a iniciales).
+
+### Archivos modificados
+
+- **`src/types/index.ts`**: `Team.profile_photo?: string | null`; `AthleteWritePayload.profile_photo?: File | null`; `TeamWritePayload.profile_photo?: File | null`.
+- **`src/api/client.ts`** (`doFetch`): si `init.body instanceof FormData` no se fija `Content-Type` (deja que el navegador ponga el `boundary`); el resto del flujo (Bearer si `auth && token`, refresh 401, `ApiError`) intacto.
+- **`src/api/admin.ts`**: helper `buildParticipantFormData(fields, photo)`; `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` ahora envían `FormData` (`profile_photo` = archivo si hay, `""` si se quitó, ausente si no se tocó). Nuevos `fetchAthletePublic`/`fetchTeamPublic`/`fetchAffiliationPublic` con `{ auth: false }` (las versiones JWT siguen intactas para el admin).
+- **`src/pages/admin/AthleteFormPage.tsx` / `TeamFormPage.tsx`**: estado `photoFile`/`removePhoto`/`previewUrl`/`photoError`; input file `accept="image/png,image/jpeg,image/webp"`; validación de tipo y 5 MB con `role="alert"`; preview (archivo nuevo o foto existente resuelta) o iniciales; botón "Quitar foto"; el payload solo incluye `profile_photo` si hay archivo (File) o si se quitó (`null`); `URL.createObjectURL`/`revokeObjectURL` con cleanup.
+- **`src/pages/admin/AthletesPage.tsx` / `TeamsPage.tsx`**: `<Avatar>` en la celda Nombre.
+- **`src/hooks/useAthleteProfile.ts`**: generalizado a `useAthleteProfile(participantId, participantType)` (`"athlete" | "team"`), `enabled: participantId != null` (ya no depende de `isAuthenticated`), consulta con `fetchAthletePublic`/`fetchTeamPublic`/`fetchAffiliationPublic` (`auth: false`); devuelve `ParticipantProfile { photoUrl, box }`.
+- **`src/components/public/AthletePanel.tsx`**: props `{ entry, participantId, participantType, onClose }`; usa `initials` compartido; "Box de origen" resuelto para atleta y equipo.
+- **`src/pages/public/CompetitionDetail.tsx`**: nuevo `teamIdByCompetitor`; el panel recibe `participantId` (atleta o equipo) y `participantType` según el competidor clickeado.
+
+### Tests
+
+- `tests/fixtures.ts`: `makeTeam` ahora incluye `profile_photo: null`.
+- `tests/setup.ts`: stub de `URL.createObjectURL`/`revokeObjectURL` (jsdom no los implementa).
+- `tests/adminApi.test.ts`: create/update de equipo pasan a verificar `FormData` (`profile_photo` archivo → `File`, `null` → `""`), y `fetchTeamPublic`/`fetchAthletePublic` se llaman con `{ auth: false }`.
+- `tests/AthleteFormPage.test.tsx` / `TeamFormPage.test.tsx`: casos de validación de tamaño/formato, adjuntar archivo y "Quitar foto".
+- `tests/AthletePanel.test.tsx`: nueva firma + caso equipo (`participantType="team"`).
+- `tests/CompetitionDetail.test.tsx`: click en entrada de equipo abre el panel con `participantType="team"`.
+- `tests/TeamsPage.test.tsx`: el test de ordenamiento usa `includes` (el avatar agrega iniciales antes del nombre en el `textContent`).
+
+### Verificación
+
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **217/217** en verde (25 archivos) — 200 → 217 (+17 tests) |
+| `npm run build` | OK (Vite; warning de chunk >500 kB preexistente) |
+
+### Notas y avisos backend (pendientes del usuario)
+
+1. **`TeamSerializer` no expone `profile_photo`** (`fields = ('id', 'name', 'affiliation')`): el modelo `Team.profile_photo` ya existe y la migración `participants.0004_team_profile_photo` está aplicada, pero el serializer debe incluir `profile_photo` para que la subida en equipos funcione y la foto se muestre. Mientras tanto el frontend degrada a iniciales. **(✅ aplicado 2026-10-06: `TeamSerializer` ahora incluye `profile_photo`)**
+2. **Lecturas no públicas**: `AthleteViewSet` y `TeamViewSet` son `IsAuthenticated` para *todos* los métodos. Para que el panel público (sin sesión) cargue foto/box, deben permitir lectura anónima (`IsAuthenticatedOrReadOnly`). Afecta a `/athletes/{id}/`, `/teams/{id}/` y `/affiliations/{id}/`. **(✅ aplicado 2026-10-06: `AthleteViewSet`, `TeamViewSet` y `AffiliationViewSet` ahora usan `IsAuthenticatedOrReadOnly`; verificado GET anónimo 200)**
+3. **`/media/` no se sirve**: `config/urls.py` no monta `static(MEDIA_URL, document_root=MEDIA_ROOT)`, por lo que las URLs `/media/...` responden 404 en dev. El avatar cae a iniciales vía `onError`. **(✅ aplicado 2026-10-06: `config/urls.py` sirve `/media/` con `static()` bajo `DEBUG`; verificado 200)**
+4. **Fuera de alcance** (no implementado): cropper, galería pública, foto en `Competitor`, roster de `TeamMember`, `affiliation` en el formulario de equipo (el serializer ya lo acepta si se agrega al payload).
+
+---
+
 ## Criterios de aceptación (PROMPT §11)
 
 - [x] build sin errores
@@ -819,6 +880,7 @@ Sin cambios de backend.
 - [x] (2026-09-21) vista pública: categorías habilitadas con recuento de inscritos antes de Workouts, con degradación elegante si el backend aún no expone los endpoints en lectura pública (Parte II-E)
 - [x] (2026-09-21) módulo admin de competidores: CRUD de inscripciones en `/admin/competitors` por scope (Individual/Equipo, nº obligatorio), para admins de competición y superuser (Parte II-F)
 - [x] (2026-09-22) módulo admin de equipos globales: `/admin/teams` sin scope ni columna Competición, catálogo global estilo Atletas, select global en Competidores (Parte II-G)
+- [x] (2026-10-06) fotos de perfil de atleta y equipo: alta/edición con multipart (`profile_photo`), avatar en `/admin/athletes` y `/admin/teams`, y panel público (`AthletePanel`) con foto + box **con y sin sesión** para atletas y equipos (Parte II-N)
 - [x] (2026-09-23) filtros de búsqueda y ordenamiento: búsqueda por nombre + orden asc/desc de la columna Nombre en las 5 tablas admin (competiciones, filiaciones, sedes, atletas, equipos); headers del leaderboard público ordenables (Parte II-H, 100 % cliente)
 - [x] (2026-09-23) creación inline de atleta/equipo: desde el formulario de competidor, mini-form + selección automática del registro creado, sin abandonar la página (mejora de UX)
 - [x] (2026-09-23) inscripción opcional en el alta de atleta: sección colapsable "Inscribir en competición" en `/admin/athletes/new` (competición + categoría + nº opcional) que crea atleta y luego competidor Individual en una sola acción (Parte II-I)

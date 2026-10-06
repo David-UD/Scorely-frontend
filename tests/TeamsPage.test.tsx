@@ -133,14 +133,14 @@ describe("TeamsPage", () => {
     const rows = () =>
       Array.from(screen.getAllByRole("row")).map((r) => r.textContent);
     expect(rows().find((r) => r?.includes("Alpha")))?.not.toBeUndefined();
-    expect(rows().findIndex((r) => r?.startsWith("Alpha"))).toBeLessThan(
-      rows().findIndex((r) => r?.startsWith("Bravo")),
+    expect(rows().findIndex((r) => r?.includes("Alpha"))).toBeLessThan(
+      rows().findIndex((r) => r?.includes("Bravo")),
     );
 
     const header = screen.getByRole("columnheader", { name: /equipo/i });
     fireEvent.click(header);
-    expect(rows().findIndex((r) => r?.startsWith("Bravo"))).toBeLessThan(
-      rows().findIndex((r) => r?.startsWith("Alpha")),
+    expect(rows().findIndex((r) => r?.includes("Bravo"))).toBeLessThan(
+      rows().findIndex((r) => r?.includes("Alpha")),
     );
   });
 });

@@ -276,4 +276,59 @@ describe("AthleteFormPage", () => {
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
   });
+
+  it("shows a validation error when the athlete photo exceeds 5 MB", () => {
+    createAthleteMutate.mockResolvedValue(makeAthlete({ id: 1 }));
+    const { container } = renderWithProviders(<AthleteFormPage />);
+    const big = new File([new ArrayBuffer(6 * 1024 * 1024)], "big.png", {
+      type: "image/png",
+    });
+    fireEvent.change(
+      container.querySelector("#profile_photo") as HTMLInputElement,
+      { target: { files: [big] } },
+    );
+    expect(screen.getByText("La foto supera los 5 MB.")).toBeInTheDocument();
+  });
+
+  it("attaches the photo file when creating an athlete", async () => {
+    createAthleteMutate.mockResolvedValue(makeAthlete({ id: 1 }));
+    const { container } = renderWithProviders(<AthleteFormPage />);
+    const file = new File(["x"], "foto.png", { type: "image/png" });
+    fireEvent.change(
+      container.querySelector("#profile_photo") as HTMLInputElement,
+      { target: { files: [file] } },
+    );
+    fireEvent.change(screen.getByLabelText("Nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.change(screen.getByLabelText("Apellido"), {
+      target: { value: "Pérez" },
+    });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() =>
+      expect(createAthleteMutate.mock.calls[0][0].profile_photo).toBe(file),
+    );
+  });
+
+  it("removes the photo when editing and clicking Quitar foto", async () => {
+    mockedFetchAthlete.mockResolvedValue(
+      makeAthlete({ id: 5, first_name: "Ana", last_name: "López", profile_photo: "/media/a.png" }),
+    );
+    updateAthleteMutate.mockResolvedValue(makeAthlete({ id: 5 }));
+    const client = createTestQueryClient();
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/admin/athletes/5/edit"]}>
+          <Routes>
+            <Route path="/admin/athletes/:id/edit" element={<AthleteFormPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar foto" }));
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() =>
+      expect(updateAthleteMutate.mock.calls[0][0].profile_photo).toBeNull(),
+    );
+  });
 });

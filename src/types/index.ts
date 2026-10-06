@@ -161,17 +161,20 @@ export interface AthleteWritePayload {
   last_name: string;
   birth_date?: string;
   gender?: string;
+  profile_photo?: File | null;
 }
 
 export interface Team {
   id: number;
   name: string;
   affiliation?: number | null;
+  profile_photo?: string | null;
 }
 
 export interface TeamWritePayload {
   id?: number;
   name: string;
+  profile_photo?: File | null;
 }
 
 export type CompetitorType = "INDIVIDUAL" | "TEAM";

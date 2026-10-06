@@ -9,6 +9,7 @@ import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
+import Avatar from "@/components/common/Avatar";
 import { filterByName, sortByName, type SortDir } from "@/utils/sortFilter";
 
 export default function TeamsPage() {
@@ -128,7 +129,10 @@ export default function TeamsPage() {
                 {teams.map((team) => (
                   <tr key={team.id}>
                     <td className="px-5 py-4 font-medium text-gray-800">
-                      {team.name}
+                      <div className="flex items-center gap-3">
+                        <Avatar src={team.profile_photo} name={team.name} />
+                        <span>{team.name}</span>
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">

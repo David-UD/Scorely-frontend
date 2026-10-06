@@ -36,15 +36,34 @@ export interface AdminCatalogs {
 
 interface Page<T> {
   results: T[];
+  next?: string | null;
+  count?: number;
 }
 
 async function fetchCatalog<T>(path: string): Promise<T[]> {
-  const data = await request<T[] | Page<T>>(path);
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray((data as Page<T>).results)) {
-    return (data as Page<T>).results;
+  const [base, query = ""] = path.split("?");
+  const params = new URLSearchParams(query);
+  const collected: T[] = [];
+  let page = 1;
+
+  for (;;) {
+    if (page > 1) params.set("page", String(page));
+    const qs = params.toString();
+    const data = await request<T[] | Page<T>>(`${base}${qs ? `?${qs}` : ""}`);
+
+    if (Array.isArray(data)) {
+      collected.push(...data);
+      break;
+    }
+    if (!data || !Array.isArray(data.results)) break;
+
+    collected.push(...data.results);
+    if (!data.next) break;
+    if (typeof data.count === "number" && collected.length >= data.count) break;
+    page += 1;
   }
-  return [];
+
+  return collected;
 }
 
 function assertSuperUser(): void {
@@ -99,6 +118,10 @@ export async function fetchAffiliations(): Promise<Affiliation[]> {
 
 export async function fetchAffiliation(id: number): Promise<Affiliation> {
   return request<Affiliation>(`/affiliations/${id}/`);
+}
+
+export async function fetchAffiliationPublic(id: number): Promise<Affiliation> {
+  return request<Affiliation>(`/affiliations/${id}/`, { auth: false });
 }
 
 export async function createAffiliation(
@@ -270,18 +293,47 @@ export async function fetchAthlete(id: number): Promise<Athlete> {
   return request<Athlete>(`/athletes/${id}/`);
 }
 
+export async function fetchAthletePublic(id: number): Promise<Athlete> {
+  return request<Athlete>(`/athletes/${id}/`, { auth: false });
+}
+
+function buildParticipantFormData(
+  fields: Record<string, string>,
+  photo: File | null | undefined,
+): FormData {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== "") fd.append(key, value);
+  }
+  if (photo instanceof File) fd.append("profile_photo", photo);
+  else if (photo === null) fd.append("profile_photo", "");
+  return fd;
+}
+
 export async function createAthlete(payload: AthleteWritePayload): Promise<Athlete> {
-  return request<Athlete>("/athletes/", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const body = buildParticipantFormData(
+    {
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      birth_date: payload.birth_date ?? "",
+      gender: payload.gender ?? "",
+    },
+    payload.profile_photo,
+  );
+  return request<Athlete>("/athletes/", { method: "POST", body });
 }
 
 export async function updateAthlete(payload: AthleteWritePayload): Promise<Athlete> {
-  return request<Athlete>(`/athletes/${payload.id}/`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const body = buildParticipantFormData(
+    {
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      birth_date: payload.birth_date ?? "",
+      gender: payload.gender ?? "",
+    },
+    payload.profile_photo,
+  );
+  return request<Athlete>(`/athletes/${payload.id}/`, { method: "PATCH", body });
 }
 
 export async function deleteAthlete(id: number): Promise<void> {
@@ -298,18 +350,28 @@ export async function fetchTeam(id: number): Promise<Team> {
   return request<Team>(`/teams/${id}/`);
 }
 
+export async function fetchTeamPublic(id: number): Promise<Team> {
+  return request<Team>(`/teams/${id}/`, { auth: false });
+}
+
 export async function createTeam(payload: TeamWritePayload): Promise<Team> {
-  return request<Team>("/teams/", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const body = buildParticipantFormData(
+    {
+      name: payload.name,
+    },
+    payload.profile_photo,
+  );
+  return request<Team>("/teams/", { method: "POST", body });
 }
 
 export async function updateTeam(payload: TeamWritePayload): Promise<Team> {
-  return request<Team>(`/teams/${payload.id}/`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const body = buildParticipantFormData(
+    {
+      name: payload.name,
+    },
+    payload.profile_photo,
+  );
+  return request<Team>(`/teams/${payload.id}/`, { method: "PATCH", body });
 }
 
 export async function deleteTeam(id: number): Promise<void> {

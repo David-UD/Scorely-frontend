@@ -246,4 +246,33 @@ describe("TeamFormPage", () => {
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
   });
+
+  it("shows a validation error for a non-allowed team photo format", () => {
+    createTeamMutate.mockResolvedValue(makeTeam({ id: 1 }));
+    const { container } = renderWithProviders(<TeamFormPage />);
+    const file = new File(["x"], "escudo.gif", { type: "image/gif" });
+    fireEvent.change(
+      container.querySelector("#profile_photo") as HTMLInputElement,
+      { target: { files: [file] } },
+    );
+    expect(
+      screen.getByText("Formato no permitido. Usá PNG, JPG o WebP."),
+    ).toBeInTheDocument();
+  });
+
+  it("attaches the photo file when creating a team", async () => {
+    createTeamMutate.mockResolvedValue(makeTeam({ id: 1 }));
+    const { container } = renderWithProviders(<TeamFormPage />);
+    const file = new File(["x"], "escudo.webp", { type: "image/webp" });
+    fireEvent.change(container.querySelector("#profile_photo") as HTMLInputElement, {
+      target: { files: [file] },
+    });
+    fireEvent.change(screen.getByLabelText("Nombre del equipo"), {
+      target: { value: "Equipo Alfa" },
+    });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() =>
+      expect(createTeamMutate.mock.calls[0][0].profile_photo).toBe(file),
+    );
+  });
 });

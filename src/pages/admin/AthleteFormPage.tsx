@@ -17,6 +17,8 @@ import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
+import { resolveMediaUrl } from "@/utils/media";
+import { initials } from "@/utils/initials";
 import type { Athlete, AthleteWritePayload } from "@/types";
 
 const athleteSchema = z.object({
@@ -32,6 +34,9 @@ const inputClassName =
   "w-full rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs outline-none transition placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-4 focus:ring-brand-500/10";
 const labelClassName = "mb-1.5 block text-sm font-medium text-gray-700";
 
+const ALLOWED_PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
 export default function AthleteFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -46,6 +51,10 @@ export default function AthleteFormPage() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [blockError, setBlockError] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const createdAthleteRef = useRef<Athlete | null>(null);
 
   const competitionsQuery = useAdminCompetitions();
@@ -67,6 +76,7 @@ export default function AthleteFormPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<AthleteFormValues>({
     resolver: zodResolver(athleteSchema),
@@ -89,6 +99,44 @@ export default function AthleteFormPage() {
       });
     }
   }, [detailQuery.data, reset]);
+
+  useEffect(() => {
+    setPhotoFile(null);
+    setPhotoError(null);
+    setRemovePhoto(false);
+  }, [detailQuery.data?.id, detailQuery.isSuccess]);
+
+  useEffect(() => {
+    if (!photoFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(photoFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
+
+  const handlePhotoChange = (file: File | null) => {
+    setPhotoError(null);
+    setRemovePhoto(false);
+    if (!file) return;
+    if (!ALLOWED_PHOTO_TYPES.includes(file.type)) {
+      setPhotoError("Formato no permitido. Usá PNG, JPG o WebP.");
+      setPhotoFile(null);
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError("La foto supera los 5 MB.");
+      setPhotoFile(null);
+      return;
+    }
+    setPhotoFile(file);
+  };
+
+  const existingPhotoUrl = detailQuery.data?.profile_photo
+    ? resolveMediaUrl(detailQuery.data.profile_photo)
+    : null;
+  const shownPhoto = previewUrl ?? (removePhoto ? null : existingPhotoUrl);
 
   const categoryNames = useMemo(() => {
     const map = new Map<number, string>();
@@ -126,6 +174,8 @@ export default function AthleteFormPage() {
       birth_date: values.birth_date || undefined,
       gender: values.gender || "",
     };
+    if (removePhoto) payload.profile_photo = null;
+    else if (photoFile) payload.profile_photo = photoFile;
     if (isEditing && id) payload.id = Number(id);
 
     const shouldInscribe = Boolean(
@@ -256,6 +306,52 @@ export default function AthleteFormPage() {
                 <option value="M">Masculino</option>
                 <option value="F">Femenino</option>
               </select>
+            </div>
+          </div>
+
+          <div>
+            <span className={labelClassName}>Foto de perfil</span>
+            <div className="flex items-center gap-4">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100">
+                {shownPhoto ? (
+                  <img
+                    src={shownPhoto}
+                    alt="Foto de perfil"
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xl font-semibold text-gray-400">
+                    {initials(`${watch("first_name")} ${watch("last_name")}`) || "F"}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  id="profile_photo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+                  className="block w-full max-w-xs text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-700"
+                />
+                {photoError && (
+                  <p className="text-xs text-error-600" role="alert">
+                    {photoError}
+                  </p>
+                )}
+                {(photoFile || existingPhotoUrl) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotoFile(null);
+                      setRemovePhoto(true);
+                      setPhotoError(null);
+                    }}
+                    className="text-left text-xs font-medium text-error-600 transition hover:text-error-700"
+                  >
+                    Quitar foto
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

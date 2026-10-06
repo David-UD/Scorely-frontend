@@ -19,6 +19,7 @@ import {
   deleteEnabledCompetitionCategory,
   fetchEnabledCompetitionCategories,
   fetchAffiliations,
+  fetchAthletes,
   fetchCompetitors,
   fetchEventCompetitors,
   createEventCompetitor,
@@ -30,6 +31,8 @@ import {
   deleteScoringRule,
   fetchLocations,
   fetchTeams,
+  fetchTeamPublic,
+  fetchAthletePublic,
   fetchAdminCompetitions,
   updateTeam,
 } from "@/api/admin";
@@ -76,6 +79,39 @@ describe("fetchAdminCompetitions", () => {
     });
     const result = await fetchAdminCompetitions();
     expect(result).toHaveLength(2);
+  });
+});
+
+describe("fetchAthletes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("walks the pagination while next is present", async () => {
+    mockedRequest
+      .mockResolvedValueOnce({
+        count: 3,
+        next: "http://localhost:8000/api/v1/athletes/?page_size=100&page=2",
+        results: [
+          { id: 1, first_name: "Ana", last_name: "Primero" },
+          { id: 2, first_name: "Ana", last_name: "Segundo" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        count: 3,
+        next: null,
+        results: [{ id: 3, first_name: "Ana", last_name: "Tercero" }],
+      });
+
+    const result = await fetchAthletes();
+
+    expect(result).toHaveLength(3);
+    expect(result[2].last_name).toBe("Tercero");
+    expect(mockedRequest).toHaveBeenNthCalledWith(1, "/athletes/?page_size=100");
+    expect(mockedRequest).toHaveBeenNthCalledWith(
+      2,
+      "/athletes/?page_size=100&page=2",
+    );
   });
 });
 
@@ -453,30 +489,47 @@ describe("teams catalog", () => {
     expect(mockedRequest).toHaveBeenCalledWith("/teams/?page_size=100");
   });
 
-  it("POSTs a new team globally", async () => {
+  it("POSTs a new team as multipart form-data", async () => {
     mockedRequest.mockResolvedValue({ id: 9, name: "Team El Pilar" });
     await createTeam({ name: "Team El Pilar" });
     expect(mockedRequest).toHaveBeenCalledWith(
       "/teams/",
       expect.objectContaining({ method: "POST" }),
     );
-    const options = mockedRequest.mock.calls[0][1];
-    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
-      name: "Team El Pilar",
-    });
+    const body = mockedRequest.mock.calls[0][1]?.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("name")).toBe("Team El Pilar");
+    expect(body.get("profile_photo")).toBeNull();
   });
 
-  it("PATCHes a team globally", async () => {
+  it("PATCHes a team and forwards the photo file", async () => {
     mockedRequest.mockResolvedValue({ id: 9, name: "Team El Pilar" });
-    await updateTeam({ id: 9, name: "Team El Pilar" });
+    const file = new File(["x"], "team.png", { type: "image/png" });
+    await updateTeam({ id: 9, name: "Team El Pilar", profile_photo: file });
     expect(mockedRequest).toHaveBeenCalledWith(
       "/teams/9/",
       expect.objectContaining({ method: "PATCH" }),
     );
-    const options = mockedRequest.mock.calls[0][1];
-    expect(JSON.parse(String(options?.body ?? "{}"))).toEqual({
-      id: 9,
-      name: "Team El Pilar",
+    const body = mockedRequest.mock.calls[0][1]?.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("name")).toBe("Team El Pilar");
+    expect(body.get("profile_photo")).toBe(file);
+  });
+
+  it("sends an empty profile_photo when removing the team photo", async () => {
+    mockedRequest.mockResolvedValue({ id: 9, name: "Team El Pilar" });
+    await updateTeam({ id: 9, name: "Team El Pilar", profile_photo: null });
+    const body = mockedRequest.mock.calls[0][1]?.body as FormData;
+    expect(body.get("profile_photo")).toBe("");
+  });
+
+  it("fetches public team and athlete profiles without auth", async () => {
+    mockedRequest.mockResolvedValue({ id: 1 });
+    await fetchTeamPublic(1);
+    await fetchAthletePublic(2);
+    expect(mockedRequest).toHaveBeenNthCalledWith(1, "/teams/1/", { auth: false });
+    expect(mockedRequest).toHaveBeenNthCalledWith(2, "/athletes/2/", {
+      auth: false,
     });
   });
 

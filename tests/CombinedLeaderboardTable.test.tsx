@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { render } from "@testing-library/react";
 import { makeWod, makeEventResult } from "./fixtures";
@@ -160,6 +160,23 @@ describe("CombinedLeaderboardTable", () => {
     expect(document.querySelectorAll("thead tr").length).toBe(1);
     expect(screen.getAllByRole("columnheader").length).toBe(3);
     expect(screen.queryByRole("columnheader", { name: /score/i })).toBeNull();
+  });
+
+  it("calls onSelectAthlete when an athlete name is clicked", () => {
+    const onSelectAthlete = vi.fn();
+    const [lb] = combined();
+    render(
+      <CombinedLeaderboardTable
+        title="RX"
+        entries={lb.entries}
+        {...wods()}
+        onSelectAthlete={onSelectAthlete}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ana López" }));
+    expect(onSelectAthlete).toHaveBeenCalledWith(
+      expect.objectContaining({ display_name: "Ana López", competitor_id: 10, rank: 1 }),
+    );
   });
 
   it("merges both phases under a single Workouts header", () => {

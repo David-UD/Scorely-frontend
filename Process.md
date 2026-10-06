@@ -929,3 +929,46 @@ Hasta entonces el frontend degrada (oculta la sección) sin romper la página.
   "Menor tiempo gana"**; se conserva solo el badge **Final**.
 - **WODs → acordeón** (`<details>`/`<summary>` nativo, **cerrado por defecto**, flecha que
   rota al abrir); ya no son tarjetas expandidas. Tests ajustados (200/200 siguen en verde).
+
+---
+
+## Paso 38 — Parte II-N: fotos de perfil de atleta y equipo (alta/edición + panel público)
+
+Fecha: 2026-10-06 · Estado: **cerrado** ✅
+
+### Objetivo
+Subir `profile_photo` (multipart) en alta/edición de atletas y equipos del admin, mostrar avatar
+en las tablas admin y visualizar la foto en el panel público que se abre al hacer click en el
+nombre del leaderboard, tanto con sesión como **sin sesión**, para atletas y equipos. Sin tocar
+el backend.
+
+### Cambios aplicados
+- `src/utils/media.ts` (nuevo): `resolveMediaUrl(url)` compartido (movido desde el hook).
+- `src/utils/initials.ts` (nuevo) y `src/components/common/Avatar.tsx` (nuevo): iniciales y avatar
+  con `onError` → fallback a iniciales si `/media/` no está servido.
+- `src/types/index.ts`: `Team.profile_photo`; `AthleteWritePayload`/`TeamWritePayload` con
+  `profile_photo?: File | null`.
+- `src/api/client.ts`: `doFetch` no fija `Content-Type` cuando `body` es `FormData`.
+- `src/api/admin.ts`: helper `buildParticipantFormData`; create/update de atleta y equipo en
+  multipart; `fetchAthletePublic`/`fetchTeamPublic`/`fetchAffiliationPublic` con `{ auth: false }`.
+- `AthleteFormPage.tsx`/`TeamFormPage.tsx`: campo foto (PNG/JPG/WebP, ≤5 MB), preview, "Quitar
+  foto", payload solo con `profile_photo` (File) o `null` si se quitó.
+- `AthletesPage.tsx`/`TeamsPage.tsx`: `<Avatar>` en la celda Nombre.
+- `useAthleteProfile.ts`: generalizado a `(participantId, participantType)`, sin depender de
+  `isAuthenticated`, con lecturas `auth: false`.
+- `AthletePanel.tsx` + `CompetitionDetail.tsx`: panel por participante (atleta/equipo).
+
+### Tests (200 → **217**)
+- Stub de `URL.createObjectURL`/`revokeObjectURL` en `tests/setup.ts`.
+- `adminApi`: multipart de equipo (archivo → `File`, quitar → `""`) y públicos `auth:false`.
+- Formularios: validación de tamaño/formato, adjuntar archivo y "Quitar foto".
+- `AthletePanel`/`CompetitionDetail`: caso equipo; `TeamsPage`: orden con `includes`.
+
+### Verificación
+- `npm run typecheck` → OK; `npm run lint` → 0 errores (1 warning preexistente).
+- `npm run test` → **217/217** (25 archivos); `npm run build` → OK.
+
+### Avisos backend (los aplica el usuario)
+1. `TeamSerializer` debe exponer `profile_photo`.
+2. `AthleteViewSet`/`TeamViewSet` deben permitir lectura anónima para el panel sin sesión.
+3. `config/urls.py` debe servir `/media/` en dev.

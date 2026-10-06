@@ -123,6 +123,7 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     id: 20,
     name: "Team El Pilar",
     affiliation: null,
+    profile_photo: null,
     ...overrides,
   };
 }

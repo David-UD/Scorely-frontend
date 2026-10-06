@@ -7,6 +7,7 @@ import Toast from "@/components/common/Toast";
 import CompetitionHero from "@/components/public/CompetitionHero";
 import WodList from "@/components/public/WodList";
 import CombinedLeaderboardTable from "@/components/public/CombinedLeaderboardTable";
+import AthletePanel from "@/components/public/AthletePanel";
 import LeaderboardFilters from "@/components/public/LeaderboardFilters";
 import LocationMap from "@/components/public/LocationMap";
 import CategoryInscritos from "@/components/public/CategoryInscritos";
@@ -16,6 +17,7 @@ import { useEvents } from "@/hooks/useEvents";
 import { useCompetitors } from "@/hooks/useCompetitors";
 import { buildCombinedLeaderboards } from "@/utils/leaderboard";
 import { formatDateRange } from "@/utils/format";
+import type { CombinedLeaderboardEntry } from "@/types";
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -53,6 +55,8 @@ export default function CompetitionDetail() {
 
   const [selectedCategoryCode, setSelectedCategoryCode] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedAthlete, setSelectedAthlete] =
+    useState<CombinedLeaderboardEntry | null>(null);
 
   const competitionQuery = useCompetition(slug);
   const id = competitionQuery.data?.id;
@@ -100,6 +104,22 @@ export default function CompetitionDetail() {
     () => combinedLeaderboards.map((lb) => lb.category),
     [combinedLeaderboards],
   );
+
+  const athleteIdByCompetitor = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const competitor of competitorsQuery.data ?? []) {
+      if (competitor.athlete != null) map.set(competitor.id, competitor.athlete);
+    }
+    return map;
+  }, [competitorsQuery.data]);
+
+  const teamIdByCompetitor = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const competitor of competitorsQuery.data ?? []) {
+      if (competitor.team != null) map.set(competitor.id, competitor.team);
+    }
+    return map;
+  }, [competitorsQuery.data]);
 
   useEffect(() => {
     if (categories.length > 0 && !categories.some((c) => c.code === selectedCategoryCode)) {
@@ -360,6 +380,7 @@ export default function CompetitionDetail() {
             entries={selectedCombinedLeaderboard.entries}
             qualifierWods={qualifierWods}
             finalWods={finalWods}
+            onSelectAthlete={setSelectedAthlete}
           />
         )}
 
@@ -370,6 +391,23 @@ export default function CompetitionDetail() {
           />
         )}
       </section>
+
+      {selectedAthlete && (
+        <AthletePanel
+          entry={selectedAthlete}
+          participantId={
+            athleteIdByCompetitor.get(selectedAthlete.competitor_id) ??
+            teamIdByCompetitor.get(selectedAthlete.competitor_id) ??
+            null
+          }
+          participantType={
+            athleteIdByCompetitor.has(selectedAthlete.competitor_id)
+              ? "athlete"
+              : "team"
+          }
+          onClose={() => setSelectedAthlete(null)}
+        />
+      )}
     </div>
   );
 }

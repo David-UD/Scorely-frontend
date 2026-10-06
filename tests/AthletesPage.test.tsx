@@ -100,4 +100,47 @@ describe("AthletesPage", () => {
     fireEvent.click(header);
     expect(pos("Leo Alpha")).toBeLessThan(pos("Ana Zeta"));
   });
+
+  it("paginates the table in pages of 20", () => {
+    const data = Array.from({ length: 25 }, (_, index) =>
+      makeAthlete({
+        id: index + 1,
+        first_name: `Atleta${String(index + 1).padStart(2, "0")}`,
+        last_name: "Test",
+      }),
+    );
+    mockedAthletes.mockReturnValue(queryResult({ isLoading: false, data }));
+    renderWithProviders(<AthletesPage />);
+
+    expect(screen.getByText("Atleta01 Test")).toBeDefined();
+    expect(screen.getByText("Atleta20 Test")).toBeDefined();
+    expect(screen.queryByText("Atleta21 Test")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+
+    expect(screen.queryByText("Atleta01 Test")).toBeNull();
+    expect(screen.getByText("Atleta21 Test")).toBeDefined();
+    expect(screen.getByText("Atleta25 Test")).toBeDefined();
+  });
+
+  it("goes back to the first page when searching", () => {
+    const data = Array.from({ length: 25 }, (_, index) =>
+      makeAthlete({
+        id: index + 1,
+        first_name: `Atleta${String(index + 1).padStart(2, "0")}`,
+        last_name: "Test",
+      }),
+    );
+    mockedAthletes.mockReturnValue(queryResult({ isLoading: false, data }));
+    renderWithProviders(<AthletesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    expect(screen.getByText("Atleta21 Test")).toBeDefined();
+
+    const input = screen.getByRole("searchbox", { name: /buscar/i });
+    fireEvent.change(input, { target: { value: "Atleta25" } });
+
+    expect(screen.getByText("Atleta25 Test")).toBeDefined();
+    expect(screen.queryByText("Atleta21 Test")).toBeNull();
+  });
 });

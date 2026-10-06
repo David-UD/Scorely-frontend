@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Athlete } from "@/types";
 import {
@@ -9,8 +9,12 @@ import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
+import Avatar from "@/components/common/Avatar";
+import Pagination from "@/components/common/Pagination";
 import { formatBirthDate } from "@/utils/format";
 import { filterByName, sortByName, type SortDir } from "@/utils/sortFilter";
+
+const PAGE_SIZE = 20;
 
 export default function AthletesPage() {
   const navigate = useNavigate();
@@ -19,6 +23,7 @@ export default function AthletesPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [page, setPage] = useState(1);
 
   const athleteName = (a: Athlete) => `${a.first_name} ${a.last_name}`;
 
@@ -31,6 +36,17 @@ export default function AthletesPage() {
       ),
     [athletesQuery.data, search, sortDir],
   );
+
+  const totalPages = Math.max(1, Math.ceil(athletes.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageAthletes = athletes.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortDir]);
 
   if (athletesQuery.isLoading) {
     return <Spinner label="Cargando atletas…" />;
@@ -92,9 +108,10 @@ export default function AthletesPage() {
           description="Creá el primer atleta para después inscribirlo en una competición."
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
+        <div className="flex flex-col gap-4">
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th
@@ -121,10 +138,15 @@ export default function AthletesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {athletes.map((athlete) => (
+                {pageAthletes.map((athlete) => (
                   <tr key={athlete.id}>
                     <td className="px-5 py-4 font-medium text-gray-800">
-                      {athlete.first_name} {athlete.last_name}
+                      <div className="flex items-center gap-3">
+                        <Avatar src={athlete.profile_photo} name={athleteName(athlete)} />
+                        <span>
+                          {athlete.first_name} {athlete.last_name}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-gray-500">
                       {athlete.gender || "—"}
@@ -158,7 +180,13 @@ export default function AthletesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onChange={setPage}
+          />
         </div>
       )}
     </div>

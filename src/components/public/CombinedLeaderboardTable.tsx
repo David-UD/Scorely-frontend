@@ -12,6 +12,7 @@ interface CombinedLeaderboardTableProps {
   entries: CombinedLeaderboardEntry[];
   qualifierWods: EventWod[];
   finalWods: EventWod[];
+  onSelectAthlete?: (entry: CombinedLeaderboardEntry) => void;
 }
 
 type SortKey = "position" | "athlete" | `qual-${number}` | `final-${number}` | "total";
@@ -96,6 +97,7 @@ export default function CombinedLeaderboardTable({
   entries,
   qualifierWods,
   finalWods,
+  onSelectAthlete,
 }: CombinedLeaderboardTableProps) {
   const [sort, setSort] = useState<SortState | null>(null);
 
@@ -280,7 +282,19 @@ export default function CombinedLeaderboardTable({
                     {entry.rank}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 font-medium text-gray-800">{entry.display_name}</td>
+                <td className="px-5 py-3.5 font-medium text-gray-800">
+                  {onSelectAthlete ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectAthlete(entry)}
+                      className="rounded text-left transition hover:text-brand-600 hover:underline"
+                    >
+                      {entry.display_name}
+                    </button>
+                  ) : (
+                    entry.display_name
+                  )}
+                </td>
                 {sortedQualWods.map((wod) => (
                   <WodCell
                     key={wod.id}

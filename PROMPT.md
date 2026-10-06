@@ -1107,6 +1107,103 @@ Rediseño **visual** de la vista pública del detalle de competición (`/competi
 
 ---
 
+# Parte II-N — Fotos de perfil de atleta y equipo (alta/edición + panel público)
+
+## 1. Título
+
+**Foto de perfil** (`profile_photo`) en la **creación y edición de atletas y equipos** del panel (`/admin/athletes`, `/admin/teams`) y su **visualización pública** en el panel lateral que se abre al **hacer click en el nombre del atleta/equipo** del leaderboard (`AthletePanel`).
+
+## 2. Objetivo
+
+- **Admin**: poder subir (y quitar/reemplazar) una foto de perfil al crear o editar un atleta o un equipo; verla como avatar en las tablas del admin.
+- **Público**: al hacer click en el nombre en `CombinedLeaderboardTable`, el `AthletePanel` muestra la **foto real** (con fallback a iniciales cuando no existe) **también sin sesión** — hoy `useAthleteProfile` solo está habilitado con login, así que en público siempre se ven iniciales.
+- **Equipos también**: hoy el panel solo resuelve atletas (`athleteIdByCompetitor` ignora `competitor.team`); un equipo debe abrir su panel con su propia foto.
+
+## 3. Alcance
+
+**Incluye:**
+- `src/api/client.ts`: soporte **`FormData`** — cuando `body instanceof FormData` **no** forzar `Content-Type: application/json` (dejar que el navegador envíe el `multipart/form-data; boundary=...`; si se setea a mano, el backend falla). Conservar el resto del flujo (Bearer, refresh en 401, `ApiError`).
+- Subida **multipart** en `createAthlete` / `updateAthlete` / `createTeam` / `updateTeam`: campos de texto en FormData + `profile_photo` **solo si** el usuario eligió archivo (o pulsó "Quitar foto" → enviar campo vacío para limpiar). **Editar sin tocar la foto = no enviar el campo** (no se borra).
+- Formularios `AthleteFormPage` y `TeamFormPage`: input `type="file"` `accept="image/png,image/jpeg,image/webp"`, validación de tipo y peso (máx. 5 MB) con mensaje en el banner/campo, **preview** (`URL.createObjectURL` + `revokeObjectURL` al desmontar), foto actual en modo edición y botón **"Quitar foto"**.
+- Avatares en `AthletesPage` y `TeamsPage` (columna Nombre: `<img>` redondeada + fallback de iniciales, patrón visual de `AthletePanel`).
+- **Panel público**: `useAthleteProfile` habilitado **con y sin sesión** (llamada con `auth: false`), y extenderlo/paralelizarlo a **equipos** (`fetchTeam` público) para que `AthletePanel` muestre foto + box también cuando la fila es de un equipo.
+- Helper compartido `resolveMediaUrl()` (hoy vive privado en `useAthleteProfile.ts`) → moverlo a `src/utils/` (p. ej. `src/utils/media.ts`) y reutilizarlo en admin y público.
+- Estados: carga, error y **fallback a iniciales** si no hay foto o si el endpoint de perfil aún no es público (degradación elegante, sin romper el panel).
+
+**Excluye / decisiones:**
+- **No se toca el backend** desde el frontend; todas las dependencias quedan como **AVISO** (sección 8). El usuario aplica los cambios en Django.
+- Sin recorte/cropper ni compresión en cliente (el archivo se sube tal cual; fuera de alcance).
+- Sin galería/listado público de atletas ni página de perfil propia: la foto se ve **solo en el panel abierto desde el nombre del leaderboard** (y en el admin).
+- No se gestiona `TeamMember`/roster ni se añade foto a `Competitor`.
+
+## 4. Endpoints del API utilizados
+
+> **Shape verificado en el backend** (`leader\Scorely/apps/participants`): `AthleteSerializer` = `(id, first_name, last_name, birth_date, gender, profile_photo, affiliation)` — **ya expone `profile_photo`**. `TeamSerializer` = `(id, name, affiliation)` — **NO expone `profile_photo`** (aunque el modelo ya lo tiene, migración `participants.0004_team_profile_photo`). `AthleteViewSet`/`TeamViewSet` = `IsAuthenticated` (lectura **no** pública). `CompetitorViewSet` = `IsAuthenticatedOrReadOnly` → **GET público**. `MEDIA_URL='/media/'`, `MEDIA_ROOT=BASE_DIR/'media'`, y `config/urls.py` **no sirve** `/media/` (404).
+
+| Acción | Método | URL | Auth | Notas |
+|--------|--------|-----|------|-------|
+| Crear atleta | POST | `/api/v1/athletes/` | JWT | **multipart**: `first_name`, `last_name`, `birth_date`, `gender`, `affiliation?`, `profile_photo?` |
+| Editar atleta | PATCH | `/api/v1/athletes/{id}/` | JWT | multipart parcial; sin `profile_photo` = sin cambio |
+| Crear equipo | POST | `/api/v1/teams/` | JWT | multipart: `name`, `affiliation?`, `profile_photo?` |
+| Editar equipo | PATCH | `/api/v1/teams/{id}/` | JWT | multipart parcial (igual que atleta) |
+| Perfil atleta (panel público) | GET | `/api/v1/athletes/{id}/` | **Pública pendiente** (hoy JWT) | Fuente de `photoUrl` + `box` |
+| Perfil equipo (panel público) | GET | `/api/v1/teams/{id}/` | **Pública pendiente** (hoy JWT) | + **falta `profile_photo` en el serializer** |
+| Box/afiliación | GET | `/api/v1/affiliations/{id}/` | **Pública pendiente** (hoy JWT) | `box` del panel |
+| Mapear inscrito → atleta/equipo | GET | `/api/v1/competitors/?competition={id}&page_size=100` | **Pública** (`IsAuthenticatedOrReadOnly`) | Ya usado por `CompetitionDetail` (`athleteIdByCompetitor`) |
+| Archivo de foto | GET | `{ORIGIN}/media/Athletes/{archivo}` | — | **404 hoy**: no hay ruta que sirva `MEDIA_ROOT` |
+
+## 5. Datos / DTOs
+
+- `Athlete` (ya existe): `profile_photo?: string | null` — **URL relativa** (`/media/Athletes/...`) o absoluta; resolver con `resolveMediaUrl()` (origen de `API_BASE_URL` sin el prefijo `/api/v1`).
+- `Team` (aumentar): `+ profile_photo?: string | null`.
+- `AthleteWritePayload` / `TeamWritePayload` (aumentar): `+ profile_photo?: File | null` (`File` del input; `null`/ausente = sin cambio; **string vacío** en multipart = limpiar la foto).
+- `AthleteProfile` (`useAthleteProfile`): sin cambios de shape (`firstName`, `lastName`, `photoUrl`, `box`); nuevo/extendido equivalente para equipo (`TeamProfile` o tipo unificado `ParticipantProfile`).
+- Fallback de UI: si `photoUrl` es `null` → iniciales (ya implementado en `AthletePanel`), nunca un `src` roto.
+
+## 6. Cambios en componentes / estructura
+
+- `src/api/client.ts`: detectar `FormData` en `request()` y no sobrescribir `Content-Type`.
+- `src/types/index.ts`: `Team.profile_photo`, `profile_photo?: File | null` en ambos `WritePayload`.
+- `src/api/admin.ts`: `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` arman `FormData`; variantes públicas (`auth: false`) de `fetchAthlete`/`fetchTeam` (o parámetro `{ auth }`) para el panel sin sesión.
+- `src/utils/media.ts` (nuevo): `resolveMediaUrl()` (movido desde `useAthleteProfile.ts`).
+- `src/pages/admin/AthleteFormPage.tsx` y `TeamFormPage.tsx`: campo de foto + preview + quitar + validación tipo/peso.
+- `src/pages/admin/AthletesPage.tsx` y `TeamsPage.tsx`: avatar en la columna Nombre.
+- `src/hooks/useAthleteProfile.ts`: habilitar sin sesión (`enabled` solo requiere `athleteId != null`), llamadas con `auth: false`, soporte de equipo.
+- `src/pages/public/CompetitionDetail.tsx`: mapear también `competitor.team → teamId` (hoy solo `competitor.athlete`) y pasárselo al panel.
+- `src/components/public/AthletePanel.tsx`: resolver perfil de atleta **o** equipo según la fila; mantener fallback de iniciales y el estado de carga.
+- `src/hooks/useAdminModules.ts`: invalidaciones existentes (ya cubren `["admin","athletes"]` / `["admin","teams"]`).
+- Tests: `tests/AthletePanel.test.tsx` (foto pública, fallback, equipo), `tests/adminApi.test.ts` (POST/PATCH con `FormData`), formularios (preview, validación, quitar foto), `client.ts` (no fuerza `Content-Type` con `FormData`).
+
+## 7. Pruebas requeridas
+
+| Test | Escenario | Resultado esperado |
+|------|-----------|--------------------|
+| Upload atleta | Crear atleta con foto | `POST /athletes/` como `multipart/form-data` con `profile_photo`; respuesta 201 |
+| Upload equipo | Crear/editar equipo con foto | `POST/PATCH /teams/` multipart con `profile_photo` |
+| Editar sin foto | Guardar cambios sin tocar la foto | **No** se envía `profile_photo` (la foto existente se conserva) |
+| Quitar foto | Botón "Quitar foto" | Se envía el campo vacío → el backend limpia `profile_photo` |
+| Validación | Archivo > 5 MB o tipo no soportado | Mensaje de error, **no** se emite la petición |
+| Content-Type | `request()` con `FormData` | No se envía `Content-Type` manual (el navegador setea el boundary) |
+| Avatar admin | Tablas `/admin/athletes`, `/admin/teams` | Se ve la foto; sin foto → iniciales |
+| Panel público sin sesión | Click en el nombre del leaderboard en `/competitions/:slug/` | Consulta el perfil con `auth: false` y muestra la foto (o iniciales si aún no es público) |
+| Panel de equipo | Fila de equipo → click en el nombre | Muestra foto + box del equipo (no solo atletas) |
+| Fallback | Perfil sin foto / endpoint aún JWT (401) | Iniciales + box `—`, sin romper el panel |
+| Sin regresiones | Suite completa + lint + typecheck + build | Todo en verde |
+
+## 8. Observaciones / riesgos
+
+- **AVISO backend 1 — `TeamSerializer` sin foto:** el modelo `Team.profile_photo` existe (migración `0004` aplicada) pero los `fields` son `(id, name, affiliation)` → hay que añadir `profile_photo`. Si no, la foto de equipo nunca llega.
+- **AVISO backend 2 — lectura pública:** `/athletes/{id}/`, `/teams/{id}/` y `/affiliations/{id}/` son `IsAuthenticated` → el panel público no puede traer foto/box sin sesión. Abrir su lectura (`AllowAny`/`IsAuthenticatedOrReadOnly`) o exponer la foto en un payload público (p. ej. anidarla en las entries del leaderboard).
+- **AVISO backend 3 — media no servida:** `config/urls.py` no monta `static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)` → **toda URL `/media/...` responde 404** (en dev y probablemente en prod si no hay storage/CDN). Sin esto, la foto se sube pero nunca se carga. Además, en producción conviene un storage con URL absoluta (S3/whitenoise/media host).
+- **URL relativa:** el serializer devuelve `/media/...`; el frontend la resuelve contra el origen del API (`resolveMediaUrl`) porque la SPA corre en otro origen/puerto. Si el backend empieza a devolver URLs absolutas, el helper ya las deja pasar.
+- **CORS:** servir `/media/` desde el origen del API no requiere cambios CORS para `<img>` (no es una petición de lectura de API con credenciales); verificar si el backend restringe `CORS_ALLOWED_ORIGINS` para el caso.
+- **multipart en DRF:** `MultiPartParser`/`FormParser` ya están en los parsers por defecto; no hace falta declarar `parser_classes`.
+- **Límite de subida:** respetar `DATA_UPLOAD_MAX_MEMORY_SIZE`/`FILE_UPLOAD_MAX_MEMORY_SIZE` de Django; validar en cliente (5 MB) para no llegar al 400/413.
+- **Rendimiento del leaderboard:** la foto **no** se pide por cada fila (una sola petición por panel); no añadir N requests al render de la tabla.
+- **Fuera de alcance (posible follow-up):** `AthleteWritePayload` actualmente no envía `affiliation` aunque el serializer lo soporta — se puede aprovechar este cambio para incluirlo, si el usuario lo pide.
+
+---
+
 # Parte III — Flujo de trabajo del agente
 
 1. **Leer antes de tocar:** revisar `Process.md`, `RESULTADOS.md` y el código existente (componentes, API client, stores, convenciones de estilo). No asumir convenciones: verificarlas en el código.
