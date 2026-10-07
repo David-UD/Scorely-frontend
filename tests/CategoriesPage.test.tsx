@@ -5,6 +5,9 @@ import { makeCompetitionCategory } from "./fixtures";
 import CategoriesPage from "@/pages/admin/CategoriesPage";
 import { useAdminCompetitionCategories } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
+
+const deleteMutate = vi.fn();
 
 vi.mock("@/hooks/useAdminModules", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/useAdminModules")>(
@@ -14,7 +17,7 @@ vi.mock("@/hooks/useAdminModules", async () => {
     ...actual,
     useAdminCompetitionCategories: vi.fn(),
     useDeleteCompetitionCategory: () => ({
-      mutate: vi.fn(),
+      mutate: deleteMutate,
       isPending: false,
     }),
   };
@@ -30,6 +33,8 @@ function setSuperUser() {
 
 beforeEach(() => {
   setSuperUser();
+  deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 afterEach(() => {
@@ -83,5 +88,24 @@ describe("CategoriesPage", () => {
     );
     renderWithProviders(<CategoriesPage />);
     expect(screen.getByText("Sin categorías")).toBeDefined();
+  });
+
+  it("shows a success toast after deleting a category", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedCategories.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [makeCompetitionCategory({ id: 1, name: "RX Individual" })],
+      }),
+    );
+    renderWithProviders(<CategoriesPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Categoría eliminada.",
+    );
+    confirmSpy.mockRestore();
   });
 });

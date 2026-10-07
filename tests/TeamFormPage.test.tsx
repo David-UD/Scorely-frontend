@@ -16,6 +16,7 @@ import {
   useAdminEnabledCategories,
 } from "@/hooks/useAdminModules";
 import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
+import { useToastStore } from "@/store/toastStore";
 
 const createTeamMutate = vi.fn();
 const updateTeamMutate = vi.fn();
@@ -92,6 +93,7 @@ beforeEach(() => {
   updateTeamMutate.mockReset();
   createCompetitorMutate.mockReset();
   vi.clearAllMocks();
+  useToastStore.setState({ toasts: [] });
   mockQueries();
 });
 
@@ -115,6 +117,9 @@ describe("TeamFormPage", () => {
       expect(createTeamMutate).toHaveBeenCalledWith({ name: "Team El Pilar" }),
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Equipo creado.",
+    );
   });
 
   it("creates the team and then the team inscription with the created id", async () => {
@@ -154,6 +159,9 @@ describe("TeamFormPage", () => {
         competition: 1,
         enabled_competition_category: 1,
       }),
+    );
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Equipo creado e inscrito en la competición.",
     );
   });
 
@@ -245,6 +253,9 @@ describe("TeamFormPage", () => {
       }),
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Equipo actualizado.",
+    );
   });
 
   it("shows a validation error for a non-allowed team photo format", () => {

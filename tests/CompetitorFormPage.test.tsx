@@ -19,6 +19,7 @@ import {
   useAdminTeams,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { useToastStore } from "@/store/toastStore";
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
@@ -98,6 +99,7 @@ beforeEach(() => {
   createAthleteMutate.mockReset();
   createTeamMutate.mockReset();
   vi.clearAllMocks();
+  useToastStore.setState({ toasts: [] });
   mockQueries();
 });
 
@@ -142,6 +144,9 @@ describe("CompetitorFormPage", () => {
         athlete: 10,
         team: null,
       }),
+    );
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Competidor creado.",
     );
   });
 
@@ -233,6 +238,9 @@ describe("CompetitorFormPage", () => {
         team: null,
       }),
     );
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Competidor actualizado.",
+    );
   });
 
   it("shows the message when the competition has no enabled categories", () => {
@@ -283,6 +291,9 @@ describe("CompetitorFormPage", () => {
       expect(athleteSelect.value).toBe("99");
     });
     expect(screen.getByRole("option", { name: "Sofía Ruiz" })).toBeDefined();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Atleta creado.",
+    );
   });
 
   it("creates a team inline and selects it in the form", async () => {
@@ -312,6 +323,9 @@ describe("CompetitorFormPage", () => {
       expect(teamSelect.value).toBe("77");
     });
     expect(screen.getByRole("option", { name: "Team Alpha" })).toBeDefined();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Equipo creado.",
+    );
   });
 
   it("shows inline validation errors without creating when fields are missing", async () => {

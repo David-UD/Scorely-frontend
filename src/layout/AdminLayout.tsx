@@ -3,12 +3,14 @@ import { SidebarProvider, useSidebar } from "@/components/admin/SidebarContext";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 import Backdrop from "@/components/admin/Backdrop";
+import ToastHost from "@/components/common/ToastHost";
 
 function LayoutContent() {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
 
   return (
     <div className="min-h-screen xl:flex">
+      <ToastHost />
       <div>
         <AdminSidebar />
         <Backdrop />

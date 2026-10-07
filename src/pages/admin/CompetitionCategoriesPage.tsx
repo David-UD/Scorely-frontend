@@ -7,6 +7,7 @@ import {
   useUpdateEnabledCategory,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { showToast } from "@/store/toastStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
@@ -89,6 +90,7 @@ export default function CompetitionCategoriesPage() {
     };
     try {
       await createMutation.mutateAsync(payload);
+      showToast("Categoría habilitada.");
       setSelectedCategoryId("");
       setNewSlots("0");
     } catch (err) {
@@ -122,6 +124,7 @@ export default function CompetitionCategoriesPage() {
     };
     try {
       await updateMutation.mutateAsync(payload);
+      showToast("Slots actualizados.");
       setEditingId(null);
     } catch (err) {
       setFormError(
@@ -138,6 +141,7 @@ export default function CompetitionCategoriesPage() {
     }
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Categoría deshabilitada."),
       onSettled: () => setDeletingId(null),
     });
   };

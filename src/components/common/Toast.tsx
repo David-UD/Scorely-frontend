@@ -4,12 +4,14 @@ interface ToastProps {
   message: string;
   onClose: () => void;
   duration?: number;
+  floating?: boolean;
 }
 
 export default function Toast({
   message,
   onClose,
   duration = 4000,
+  floating = true,
 }: ToastProps) {
   useEffect(() => {
     const timer = window.setTimeout(onClose, duration);
@@ -19,7 +21,9 @@ export default function Toast({
   return (
     <div
       role="status"
-      className="fixed right-5 bottom-5 z-[100] flex items-center gap-3 rounded-xl border border-success-200 bg-white px-4 py-3 shadow-lg animate-[toast-in_0.25s_ease-out]"
+      className={`${
+        floating ? "fixed right-5 bottom-5 z-[100]" : ""
+      } flex items-center gap-3 rounded-xl border border-success-200 bg-white px-4 py-3 shadow-lg animate-[toast-in_0.25s_ease-out]`}
     >
       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success-100 text-success-600">
         <svg

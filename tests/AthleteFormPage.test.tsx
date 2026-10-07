@@ -16,6 +16,7 @@ import {
   useAdminEnabledCategories,
 } from "@/hooks/useAdminModules";
 import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
+import { useToastStore } from "@/store/toastStore";
 
 const createAthleteMutate = vi.fn();
 const updateAthleteMutate = vi.fn();
@@ -92,6 +93,7 @@ beforeEach(() => {
   updateAthleteMutate.mockReset();
   createCompetitorMutate.mockReset();
   vi.clearAllMocks();
+  useToastStore.setState({ toasts: [] });
   mockQueries();
 });
 
@@ -123,6 +125,9 @@ describe("AthleteFormPage", () => {
       }),
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Atleta creado.",
+    );
   });
 
   it("creates the athlete and then the individual inscription with the created id", async () => {
@@ -170,6 +175,9 @@ describe("AthleteFormPage", () => {
         competition: 1,
         enabled_competition_category: 1,
       }),
+    );
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Atleta creado e inscrito en la competición.",
     );
   });
 
@@ -275,6 +283,9 @@ describe("AthleteFormPage", () => {
       }),
     );
     expect(createCompetitorMutate).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Atleta actualizado.",
+    );
   });
 
   it("shows a validation error when the athlete photo exceeds 5 MB", () => {

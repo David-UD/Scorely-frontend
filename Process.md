@@ -972,3 +972,54 @@ el backend.
 1. `TeamSerializer` debe exponer `profile_photo`.
 2. `AthleteViewSet`/`TeamViewSet` deben permitir lectura anónima para el panel sin sesión.
 3. `config/urls.py` debe servir `/media/` en dev.
+
+> **Actualización 2026-10-06:** los 3 avisos fueron **aplicados y verificados** por el usuario
+> (`TeamSerializer` con `profile_photo`; `IsAuthenticatedOrReadOnly` en `AthleteViewSet`/
+> `TeamViewSet`/`AffiliationViewSet`; `/media/` servido con `static()` bajo `DEBUG` → GET 200).
+
+---
+
+## Paso 39 — Toasts de confirmación en CRUD `/admin/*` (COMPLETADO)
+
+Fecha: 2026-10-06 · Estado: **cerrado** ✅
+
+### Objetivo
+Implementar la regla de `PROMPT.md`: **toda operación que cree, edite o elimine** información en
+`/admin/*` (formularios, altas rápidas y acciones de tabla) debe confirmarse con un **toast** de
+éxito, reutilizando el componente `Toast`. Ejecuta el plan `PLAN.md` (Opción A).
+
+### Decisión de arquitectura
+El patrón de **estado local** no sirve para los formularios porque **navegan** a la lista al
+guardar (el componente se desmonta y el toast nunca se ve). Se optó por **store global +
+host**: `showToast(msg)` imperativo (`toastStore`) + `<ToastHost />` montado una sola vez en
+`AdminLayout`; sobrevive a la navegación.
+
+### Pasos ejecutados
+1. `src/store/toastStore.ts` (nuevo): `useToastStore` + `showToast`/`dismissToast`; ignora vacíos.
+2. `src/components/common/ToastHost.tsx` (nuevo): stack `fixed right-5 bottom-5 z-[100]`.
+3. `src/components/common/Toast.tsx`: prop `floating` (el host desactiva el posicionamiento fijo).
+4. `AdminLayout.tsx`: monta `<ToastHost />`.
+5. Toasts de borrado en 8 listas: `AthletesPage`, `TeamsPage`, `CompetitorsPage`,
+   `CompetitionsPage`, `CategoriesPage`, `AffiliationsPage`, `LocationsPage`, `EventsPage`.
+6. `CompetitionCategoriesPage`: habilitar/slots/quitar.
+7. Formularios crear/editar (`showToast` antes de `navigate`): categoría, filiación, sede,
+   competición, evento, atleta, equipo, competidor.
+   - Inscripción desde alta de atleta/equipo → **mensaje compuesto** (evita doble toast);
+     fallo de inscripción → mantiene el toast de creado + banner y no navega.
+   - Alta rápida en competidor → "Atleta/Equipo creado.".
+
+### Tests (217 → **242**; 25 → 28 archivos)
+- Nuevos `tests/toastStore.test.ts` (5) y `tests/ToastHost.test.tsx` (3).
+- Aserción de toast (contra `useToastStore`) en 8 páginas de lista + 3 formularios; los mocks de
+  mutación invocan `options.onSuccess(...)`.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **242/242** en verde (28 archivos).
+- `npm run build` → OK (warning de chunk >500 kB preexistente).
+
+### Notas
+- Errores de mutación: sin cambios (banner `role="alert"`/`ErrorState`); el `Toast` es de éxito.
+- `ScoresPage`/`ScoringPage`: migración opcional **omitida** (ya cumplen, no navegan).
+- Sin ramas ni commit/push.

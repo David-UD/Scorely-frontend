@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAdminCompetitionCategories, useDeleteCompetitionCategory } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -20,6 +21,7 @@ export default function CategoriesPage() {
     }
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Categoría eliminada."),
       onSettled: () => setDeletingId(null),
     });
   };

@@ -11,6 +11,7 @@ import {
   useUpdateCompetitionCategory,
 } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -118,8 +119,10 @@ export default function CategoryFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Categoría actualizada.");
       } else {
         await createMutation.mutateAsync(payload);
+        showToast("Categoría creada.");
       }
       navigate("/admin/categories", { replace: true });
     } catch (err) {

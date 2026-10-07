@@ -5,6 +5,9 @@ import { makeCompetition } from "./fixtures";
 import CompetitionsPage from "@/pages/admin/CompetitionsPage";
 import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
+
+const deleteMutate = vi.fn();
 
 vi.mock("@/hooks/useAdminCompetitions", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/useAdminCompetitions")>(
@@ -14,7 +17,7 @@ vi.mock("@/hooks/useAdminCompetitions", async () => {
     ...actual,
     useAdminCompetitions: vi.fn(),
     useDeleteCompetition: () => ({
-      mutate: vi.fn(),
+      mutate: deleteMutate,
       isPending: false,
     }),
   };
@@ -30,6 +33,8 @@ function setSuperUser() {
 
 beforeEach(() => {
   setSuperUser();
+  deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 afterEach(() => {
@@ -147,5 +152,24 @@ describe("CompetitionsPage", () => {
     expect(rows().findIndex((r) => r?.startsWith("Bravo"))).toBeLessThan(
       rows().findIndex((r) => r?.startsWith("Alpha")),
     );
+  });
+
+  it("shows a success toast after deleting a competition", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedUseAdminCompetitions.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [makeCompetition({ id: 1, name: "Alpha Games" })],
+      }),
+    );
+    renderWithProviders(<CompetitionsPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Competición eliminada.",
+    );
+    confirmSpy.mockRestore();
   });
 });

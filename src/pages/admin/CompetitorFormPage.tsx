@@ -17,6 +17,7 @@ import {
   useUpdateCompetitor,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { showToast } from "@/store/toastStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import InlineEntitySelect from "@/components/admin/InlineEntitySelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
@@ -170,8 +171,10 @@ export default function CompetitorFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Competidor actualizado.");
       } else {
         await createMutation.mutateAsync(payload);
+        showToast("Competidor creado.");
       }
       navigate("/admin/competitors", { replace: true });
     } catch (err) {
@@ -286,14 +289,16 @@ export default function CompetitorFormPage() {
                       ],
                     },
                   ]}
-                  onCreate={async (values) =>
-                    createAthleteMutation.mutateAsync({
+                  onCreate={async (values) => {
+                    const created = await createAthleteMutation.mutateAsync({
                       first_name: values.first_name,
                       last_name: values.last_name,
                       birth_date: values.birth_date || undefined,
                       gender: values.gender || "",
-                    })
-                  }
+                    });
+                    showToast("Atleta creado.");
+                    return created;
+                  }}
                   onSelectCreated={(id) => setValue("athlete", String(id))}
                 />
               ) : (
@@ -315,9 +320,13 @@ export default function CompetitorFormPage() {
                   fields={[
                     { name: "name", label: "Nombre del equipo", required: true },
                   ]}
-                  onCreate={async (values) =>
-                    createTeamMutation.mutateAsync({ name: values.name })
-                  }
+                  onCreate={async (values) => {
+                    const created = await createTeamMutation.mutateAsync({
+                      name: values.name,
+                    });
+                    showToast("Equipo creado.");
+                    return created;
+                  }}
                   onSelectCreated={(id) => setValue("team", String(id))}
                 />
               )}

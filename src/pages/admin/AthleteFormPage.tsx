@@ -14,6 +14,7 @@ import {
   useUpdateAthlete,
 } from "@/hooks/useAdminModules";
 import { useAdminCompetitions } from "@/hooks/useAdminCompetitions";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -190,6 +191,7 @@ export default function AthleteFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Atleta actualizado.");
       } else {
         let created = createdAthleteRef.current;
         if (!created) {
@@ -206,12 +208,16 @@ export default function AthleteFormPage() {
               competition: Number(selectedCompetition),
               enabled_competition_category: Number(selectedCategory),
             });
+            showToast("Atleta creado e inscrito en la competición.");
           } catch {
+            showToast("Atleta creado.");
             setError(
               "El atleta se guardó, pero la inscripción falló. Corregí los datos de inscripción e intentá de nuevo.",
             );
             return;
           }
+        } else {
+          showToast("Atleta creado.");
         }
       }
       navigate("/admin/athletes", { replace: true });

@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders, queryResult } from "./utils";
 import { makeCompetitionCategory, makeEnabledCompetitionCategory } from "./fixtures";
 import CompetitionCategoriesPage from "@/pages/admin/CompetitionCategoriesPage";
 import { useAdminEnabledCategories, useAdminCompetitionCategories } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { useToastStore } from "@/store/toastStore";
+
+const createMutateAsync = vi.fn();
+const updateMutateAsync = vi.fn();
+const deleteMutate = vi.fn();
 
 vi.mock("@/components/admin/CompetitionScopeSelect", () => ({
   default: () => null,
@@ -26,9 +31,9 @@ vi.mock("@/hooks/useAdminModules", async () => {
     ...actual,
     useAdminEnabledCategories: vi.fn(),
     useAdminCompetitionCategories: vi.fn(),
-    useCreateEnabledCategory: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useUpdateEnabledCategory: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useDeleteEnabledCategory: () => ({ mutate: vi.fn(), isPending: false }),
+    useCreateEnabledCategory: () => ({ mutateAsync: createMutateAsync, isPending: false }),
+    useUpdateEnabledCategory: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
+    useDeleteEnabledCategory: () => ({ mutate: deleteMutate, isPending: false }),
   };
 });
 
@@ -72,6 +77,12 @@ function mockQueries() {
 beforeEach(() => {
   setScope(1);
   vi.clearAllMocks();
+  createMutateAsync.mockReset();
+  updateMutateAsync.mockReset();
+  deleteMutate.mockReset();
+  createMutateAsync.mockResolvedValue({});
+  updateMutateAsync.mockResolvedValue({});
+  useToastStore.setState({ toasts: [] });
   mockQueries();
 });
 
@@ -109,5 +120,42 @@ describe("CompetitionCategoriesPage", () => {
     setScope(null);
     renderWithProviders(<CompetitionCategoriesPage />);
     expect(screen.getByText("Habilitar")).toBeDisabled();
+  });
+
+  it("shows a success toast after enabling a category", async () => {
+    renderWithProviders(<CompetitionCategoriesPage />);
+    fireEvent.change(screen.getByLabelText("Categoría"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByText("Habilitar"));
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+        "Categoría habilitada.",
+      ),
+    );
+  });
+
+  it("shows a success toast after updating finalist slots", async () => {
+    renderWithProviders(<CompetitionCategoriesPage />);
+    fireEvent.click(screen.getByText("Editar"));
+    fireEvent.click(screen.getByText("Guardar"));
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+        "Slots actualizados.",
+      ),
+    );
+  });
+
+  it("shows a success toast after removing an enabled category", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<CompetitionCategoriesPage />);
+    screen.getByText("Quitar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Categoría deshabilitada.",
+    );
+    confirmSpy.mockRestore();
   });
 });

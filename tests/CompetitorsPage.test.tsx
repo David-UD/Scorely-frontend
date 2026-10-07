@@ -17,6 +17,7 @@ import {
   useAdminTeams,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { useToastStore } from "@/store/toastStore";
 
 const deleteMutate = vi.fn();
 
@@ -96,6 +97,7 @@ function mockQueries() {
 beforeEach(() => {
   useAdminScopeStore.setState({ competitionId: 1 });
   deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
   vi.clearAllMocks();
   mockQueries();
 });
@@ -136,6 +138,19 @@ describe("CompetitorsPage", () => {
     );
     renderWithProviders(<CompetitorsPage />);
     expect(screen.getByText("Sin competidores")).toBeDefined();
+  });
+
+  it("shows a success toast after deleting a competitor", () => {
+    deleteMutate.mockImplementation(
+      (_id: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<CompetitorsPage />);
+    screen.getAllByText("Eliminar")[0].click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Competidor eliminado.",
+    );
+    confirmSpy.mockRestore();
   });
 
   it("shows a clear error when deleting a competitor in use", async () => {

@@ -5,6 +5,7 @@ import { makeLocation } from "./fixtures";
 import LocationsPage from "@/pages/admin/LocationsPage";
 import { useAdminLocations } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 
 const deleteMutate = vi.fn();
 
@@ -33,6 +34,7 @@ function setSuperUser() {
 beforeEach(() => {
   setSuperUser();
   deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 afterEach(() => {
@@ -91,6 +93,22 @@ describe("LocationsPage", () => {
     );
     renderWithProviders(<LocationsPage />);
     expect(screen.getByText("Sin sedes")).toBeDefined();
+  });
+
+  it("shows a success toast after deleting a location", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedLocations.mockReturnValue(
+      queryResult({ isLoading: false, data: [makeLocation()] }),
+    );
+    renderWithProviders(<LocationsPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Sede eliminada.",
+    );
+    confirmSpy.mockRestore();
   });
 
   it("shows a clear error when deleting a location in use", async () => {

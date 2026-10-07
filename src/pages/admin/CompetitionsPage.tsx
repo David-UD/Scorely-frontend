@@ -5,6 +5,7 @@ import {
   useDeleteCompetition,
 } from "@/hooks/useAdminCompetitions";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -51,6 +52,7 @@ export default function CompetitionsPage() {
     }
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Competición eliminada."),
       onSettled: () => setDeletingId(null),
     });
   };

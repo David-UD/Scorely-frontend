@@ -5,6 +5,7 @@ import { makeAffiliation } from "./fixtures";
 import AffiliationsPage from "@/pages/admin/AffiliationsPage";
 import { useAdminAffiliations } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 
 const deleteMutate = vi.fn();
 
@@ -33,6 +34,7 @@ function setSuperUser() {
 beforeEach(() => {
   setSuperUser();
   deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 afterEach(() => {
@@ -88,6 +90,22 @@ describe("AffiliationsPage", () => {
     );
     renderWithProviders(<AffiliationsPage />);
     expect(screen.getByText("Sin filiaciones")).toBeDefined();
+  });
+
+  it("shows a success toast after deleting an affiliation", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedAffiliations.mockReturnValue(
+      queryResult({ isLoading: false, data: [makeAffiliation()] }),
+    );
+    renderWithProviders(<AffiliationsPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Filiación eliminada.",
+    );
+    confirmSpy.mockRestore();
   });
 
   it("shows a clear error when deleting an affiliation in use", async () => {

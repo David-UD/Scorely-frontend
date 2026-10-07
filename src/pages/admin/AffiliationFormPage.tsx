@@ -11,6 +11,7 @@ import {
   useUpdateAffiliation,
 } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -121,8 +122,10 @@ export default function AffiliationFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Filiación actualizada.");
       } else {
         await createMutation.mutateAsync(payload);
+        showToast("Filiación creada.");
       }
       navigate("/admin/affiliations", { replace: true });
     } catch (err) {

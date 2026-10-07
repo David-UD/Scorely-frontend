@@ -6,6 +6,7 @@ import {
   useDeleteTeam,
 } from "@/hooks/useAdminModules";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
+import { showToast } from "@/store/toastStore";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
@@ -51,6 +52,7 @@ export default function TeamsPage() {
     setError(null);
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Equipo eliminado."),
       onError: (err) => {
         setError(
           err instanceof ApiError

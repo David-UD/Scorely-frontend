@@ -12,6 +12,7 @@ import {
 import { useAdminScopeStore } from "@/store/adminScopeStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
+import { showToast } from "@/store/toastStore";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
@@ -105,6 +106,7 @@ export default function CompetitorsPage() {
     setError(null);
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Competidor eliminado."),
       onError: (err) => {
         setError(
           err instanceof ApiError

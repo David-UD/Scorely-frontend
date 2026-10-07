@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { useAdminLocations, useDeleteLocation } from "@/hooks/useAdminModules";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -41,6 +42,7 @@ export default function LocationsPage() {
     setError(null);
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Sede eliminada."),
       onError: (err) => {
         setError(
           err instanceof ApiError

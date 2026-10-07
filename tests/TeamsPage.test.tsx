@@ -4,6 +4,7 @@ import { renderWithProviders, queryResult } from "./utils";
 import { makeTeam } from "./fixtures";
 import TeamsPage from "@/pages/admin/TeamsPage";
 import { useAdminTeams } from "@/hooks/useAdminModules";
+import { useToastStore } from "@/store/toastStore";
 
 const deleteMutate = vi.fn();
 
@@ -25,6 +26,7 @@ const mockedTeams = vi.mocked(useAdminTeams);
 
 beforeEach(() => {
   deleteMutate.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 afterEach(() => {
@@ -69,6 +71,22 @@ describe("TeamsPage", () => {
     renderWithProviders(<TeamsPage />);
     screen.getByText("Eliminar").click();
     expect(deleteMutate).toHaveBeenCalledWith(1, expect.any(Object));
+    confirmSpy.mockRestore();
+  });
+
+  it("shows a success toast after deleting a team", () => {
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedTeams.mockReturnValue(
+      queryResult({ isLoading: false, data: [makeTeam({ id: 1, name: "Equipo A" })] }),
+    );
+    renderWithProviders(<TeamsPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Equipo eliminado.",
+    );
     confirmSpy.mockRestore();
   });
 

@@ -12,6 +12,7 @@ import {
   useUpdateCompetition,
 } from "@/hooks/useAdminCompetitions";
 import { useAuthStore } from "@/store/authStore";
+import { showToast } from "@/store/toastStore";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
@@ -121,8 +122,10 @@ export default function CompetitionFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Competición actualizada.");
       } else {
         await createMutation.mutateAsync(payload);
+        showToast("Competición creada.");
       }
       navigate("/admin/competitions", { replace: true });
     } catch (err) {

@@ -1,274 +1,293 @@
-# PLAN — Fotos de perfil de atleta y equipo (administración + panel público) (Parte II-N)
+# PLAN — Toasts de confirmación en flujos de alta/edición/borrado (regla de `PROMPT.md`)
 
-> **Documento de planificación y seguimiento.** Implementación de la spec
-> **Parte II-N** de `PROMPT.md`: **subida de `profile_photo`** en la creación/edición de
-> atletas y equipos (`/admin/athletes`, `/admin/teams`) y su **visualización pública**
-> en el panel que se abre al **hacer click en el nombre** del leaderboard público
-> (`AthletePanel`).
+> **Documento de planificación y seguimiento (NO ejecutado todavía).**
+> Implementa la regla añadida a `PROMPT.md` → *Reglas de convenciones*:
+> **toda operación que cree, edite o elimine información debe confirmarse con un toast**
+> reutilizando `src/components/common/Toast.tsx`.
 >
 > Fecha: 2026-10-06
-> Estado: **EJECUTADO ✅** — implementado y verificado (typecheck/lint/test/build OK; 200 → 217 tests). Documentado en `RESULTADOS.md`.
-> Spec origen: `PROMPT.md` → `# Parte II-N — Fotos de perfil de atleta y equipo (alta/edición + panel público)`
-> Anterior: Parte II-M (Rediseño CompetitionDetail) ✅ cerrada (ver PLAN.md / RESULTADOS.md).
+> Estado: **EJECUTADO ✅** — implementado y verificado (ver `RESULTADOS.md`).
+> Spec origen: `PROMPT.md` → sección *Reglas de convenciones* (bullet **Feedback de mutaciones**).
+> Anterior: Parte II-N (fotos + panel) ✅ cerrada (ver `RESULTADOS.md`).
 
 ---
 
 ## 0. Objetivo
 
-- **Admin**: poder subir, reemplazar y quitar una foto de perfil al crear/editar atletas y
-  equipos (subida `multipart/form-data`), con preview y validación, y verla como avatar en
-  las tablas `AthletesPage`/`TeamsPage`.
-- **Público**: al hacer click en el nombre del atleta/equipo en `CombinedLeaderboardTable`,
-  `AthletePanel` muestra la **foto real + box** (con fallback a iniciales) **también sin
-  sesión**; hoy `useAthleteProfile` solo consulta con login y **solo atletas** (los equipos
-  quedan sin perfil/foto).
-- **Todo en frontend**: la subida y el panel usan los endpoints existentes. Los cambios de
-  backend que requiere la visualización pública quedan como **AVISO** (sección 8) para que
-  el usuario los aplique manualmente.
+- Mostrar un **toast de éxito** cada vez que una operación **crea, edita o elimina** datos en el
+  panel `/admin/*` (formularios, altas rápidas y acciones de tabla).
+- Reutilizar el componente existente `Toast` **sin** duplicar su diseño.
+- Mantener el manejo de **errores** como está (banner `role="alert"` / `ErrorState`); el `Toast`
+  actual está estilado como **éxito**, así que **no** se usa para errores.
+- No romper la UX actual (navegación, `window.confirm`, invalidación de React Query).
 
 ---
 
-## 1. Decisiones y hallazgos (verificados en el código)
+## 1. Problema clave a resolver (decisión de arquitectura)
 
-| Tema | Hallazgo / decisión |
-|---|---|
-| **Subida = multipart** | DRF ya incluye `MultiPartParser` por defecto. El cliente `request()` (`src/api/client.ts:78`) **siempre** setea `Content-Type: application/json` → hay que **no forzarlo cuando `body` es `FormData`** (si no, el boundary se rompe y el backend responde 4xx). |
-| **Atleta: foto ya expuesta** | `AthleteSerializer.fields = (id, first_name, last_name, birth_date, gender, profile_photo, affiliation)` → `profile_photo` **ya llega y ya se puede escribir** por multipart. |
-| **Equipo: foto en el modelo pero NO en el serializer** | `Team.profile_photo` existe en el modelo (migración `participants.0004_team_profile_photo` ya aplicada), pero `TeamSerializer.fields = (id, name, affiliation)`. **AVISO backend**: añadir `profile_photo` al serializer, si no el frontend no puede ni subirla ni leerla. |
-| **Lectura pública** | `AthleteViewSet`/`TeamViewSet` = `IsAuthenticated` → `/athletes/{id}/` y `/teams/{id}/` **no** son públicos; `/competitors/{id}/` sí (GET, `IsAuthenticatedOrReadOnly`). **AVISO backend**: abrir lectura. Mientras tanto, `AthletePanel` degrada a **iniciales + `—`** (comportamiento actual sin sesión). |
-| **Media no servida** | `MEDIA_URL='/media/'`, `MEDIA_ROOT=BASE_DIR/'media'`, pero `config/urls.py` **no** monta `static(settings.MEDIA_URL, document_root=...)` → cualquier `/media/...` responde **404**. **AVISO backend**: sin esto la foto subida jamás carga. |
-| **URL relativa** | El serializer devuelve la ruta relativa (`/media/Athletes/...`); la SPA corre en otro origen → resolver contra el origen de `API_BASE_URL` (`resolveMediaUrl`, hoy función privada en `useAthleteProfile.ts:14`). Se mueve a `src/utils/media.ts` y se comparte (admin + público). |
-| **Payloads actuales** | `AthleteWritePayload`/`TeamWritePayload` (types) no llevan `profile_photo`; `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` (`src/api/admin.ts:273-313`) envían **JSON** → migran a **FormData**. |
-| **Público ya existente** | `AthletePanel.tsx` + `CombinedLeaderboardTable` (`onSelectAthlete`) + `CompetitionDetail` ya abren el panel al hacer click en el nombre; `athleteIdByCompetitor` mapea solo `competitor.athlete` (**equipos ignorados**) y `useAthleteProfile` está `enabled: isAuthenticated && athleteId != null`. |
-| **Diseño del campo foto** | No meter `File` en react-hook-form/zod: estado local `photoFile: File | null` + `removePhoto: boolean`, validación manual en `onChange` (tipo png/jpeg/webp, ≤ 5 MB) con banner/campo de error. Preview con `URL.createObjectURL` (revocar en cleanup). |
-| **Semántica multipart** | Editar sin tocar foto → **no** enviar la clave `profile_photo`. "Quitar foto" → enviar `profile_photo: ""` (DRF `ImageField` → `None`). Sobrescribir/alta → enviar el `File`. |
-| **Tests actuales** | Uno por página involucrada ya existe (ver §2). Suite base **200/200** (24 archivos). Las fixtures `makeAthlete`/`makeTeam` se extienden con `profile_photo`. |
+**El patrón actual de `Toast` (estado local de la página) no alcanza para altas/ediciones**, porque
+esos flujos **navegan** a la lista al terminar (`navigate("/admin/...")`). Si el toast se guarda en
+el estado local del formulario, el componente se **desmonta al navegar** y el usuario **nunca lo ve**.
 
----
+| Opción | Cómo | Veredicto |
+|---|---|---|
+| **A. Host global + store (RECOMENDADA)** | Store Zustand (`toastStore`) + `ToastHost` montado en `AdminLayout`; función imperativa `showToast(msg)` invocable desde cualquier `onSuccess` (sobrevive a la navegación). | ✅ Menos código repetido, cubre formularios y borrados, funciona tras navegar. |
+| B. Flash por `navigate(..., { state: { toast } })` | Cada formulario pasa el mensaje por `location.state`; cada lista lo lee con `useLocation` y limpia. | ❌ Más boilerplate repetido en cada lista y formulario; fácil de olvidar. |
+| C. Mantener estado local | Igual que `ScoresPage`/`ScoringPage`. | ❌ No sirve para flujos que navegan (la mayoría). |
 
-## 2. Clave técnica (estado actual verificado)
+**Decisión propuesta:** Opción **A**. El `Toast` (presentacional) se conserva tal cual; se agrega
+un host que lo reutiliza. `ScoresPage`/`ScoringPage` (que hoy usan estado local y no navegan) pueden
+**migrarse** a `showToast` para unificar (opcional, ver Paso 8).
 
-- **Cliente**: `src/api/client.ts` — `request<T>(path, options)` (línea 66). `RequestOptions` extiende `RequestInit` (body tipado por TS). `doFetch` arma `Headers` y setea `Content-Type` (línea 74). Cambios: construir `Headers` solo con lo que no sea `FormData`; `Content-Type` solo si `body` no es `FormData`.
-- **API admin**: `src/api/admin.ts`
-  - `fetchCatalog<T>(path)` (helper de listas, JWT).
-  - `fetchAthlete(id)` (`req JWT`), `fetchTeam(id)` (JWT) — usados en admin y en `useAthleteProfile` (público).
-  - `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam` → FormData.
-- **Formularios**:
-  - `src/pages/admin/AthleteFormPage.tsx` (388 l): schema zod (`first_name`,`last_name`,`birth_date`,`gender`), bloque "Inscribir en competición (opcional)", `onSubmit` arma `AthleteWritePayload` y llama `updateMutation`/`createMutation` (+ `createCompetitor` si inscribe). Archivo donde se precarga con `reset()` al editar (efecto sobre `detailQuery.data`).
-  - `src/pages/admin/TeamFormPage.tsx` (320 l): schema `name`, mismo patrón de inscripción.
-- **Tablas admin**: `AthletesPage.tsx` y `TeamsPage.tsx` — columna "Atleta"/"Equipo" como `<td>` con nombre plano (línea 126-128 y 130-131); ahí se añade el avatar (img + fallback iniciales).
-- **Hooks admin**: `src/hooks/useAdminModules.ts` — `useAdminAthletes`, `useAdminTeams`, `useCreateAthlete`, `useUpdateAthlete`, `useCreateTeam`, `useUpdateTeam`. `mutationFn` apunta directo a la función api → **no cambian sus firmas** (payload con `profile_photo` fluye solo).
-- **Público**:
-  - `src/pages/public/CompetitionDetail.tsx` (396 l): `athleteIdByCompetitor` (línea 108-114) usa `useCompetitors(id)`; `onSelectAthlete={setSelectedAthlete}` (375); `AthletePanel` (387-393) con `athleteId={athleteIdByCompetitor.get(...) ?? null}`. Tipos: `Competitor` trae `athlete?: number|null` y `team?: number|null`.
-  - `src/components/public/AthletePanel.tsx` (144 l): props `{ entry, athleteId, onClose }`; usa `useAthleteProfile(athleteId)`; ya renderiza `img` (línea 96-101) o iniciales (103-105); campo "Box de origen" + Puntos + Posición.
-  - `src/hooks/useAthleteProfile.ts` (42 l): `AtheleteProfile { firstName, lastName, photoUrl, box }`; resuelve `photoUrl` con `resolveMediaUrl` (privado) y `box` con `fetchAffiliation`. `enabled: isAuthenticated && athleteId != null`.
-- **Tipos/DTOs**: `src/types/index.ts` — `Athlete.profile_photo?: string|null` (línea 154, **ya existe**); `Team` (166-170) **sin** `profile_photo`; `AthleteWritePayload` (158-164) y `TeamWritePayload` (172-175) sin `profile_photo`.
-- **Fixtures (tests)**: `tests/fixtures.ts` — `makeAthlete` (108-119, `profile_photo: null`), `makeTeam` (121-128, sin `profile_photo`).
-- **Verificación**: `npm run typecheck`, `npm run lint` (0 errores; 1 warning preexistente `SidebarContext.tsx`), `npm run test` (**200/200**, 24 archivos), `npm run build`.
+> ⚠️ La regla de `PROMPT.md` menciona "patrón vigente: estado local". Si se aprueba la Opción A, se
+> actualiza ese bullet para citar el **store + `showToast`** (Paso 11).
 
 ---
 
-## 3. Cambios por archivo (pasos de ejecución)
+## 2. Hallazgos verificados en el código
 
-### Paso 0 — Registrar inicio
+- `src/components/common/Toast.tsx` (55 l): componente **presentacional** con props
+  `{ message: string; onClose: () => void; duration?: number (4000) }`; `role="status"`, auto-cierre.
+  **No** hay provider/hook/host: se instancia manualmente por página.
+- Usos actuales de `Toast`: `ScoresPage.tsx` ("Resultados guardados correctamente."),
+  `ScoringPage.tsx` ("Reglas guardadas correctamente.") y `CompetitionDetail.tsx` (copiar enlace,
+  **público, no CRUD → fuera de alcance**).
+- `src/layout/AdminLayout.tsx` (36 l): único layout de `/admin/*`; `<LayoutContent>` renderiza
+  `<AdminHeader/>` + `<Outlet/>`. **Punto de montaje ideal del host global.**
+- Estado global ya usa **Zustand** (`src/store/authStore.ts`, `src/store/adminScopeStore.ts`), con
+  patrón `create<T>()(...)` y acciones por `set`. El store de toast debe seguir ese patrón (sin
+  `persist`).
+- **Mutaciones por página (verificado con grep):**
 
-- Añadir sección **"Paso 38 — Parte II-N: Fotos de perfil de atleta y equipo"** a `Process.md`
-  (inicio, plan resumido y lista de pasos).
+  **Listas con borrado (sin toast):** `CompetitionsPage` (`useDeleteCompetition`),
+  `CategoriesPage` (`useDeleteCompetitionCategory`), `AffiliationsPage` (`useDeleteAffiliation`),
+  `LocationsPage` (`useDeleteLocation`), `EventsPage` (`useDeleteEvent`),
+  `AthletesPage` (`useDeleteAthlete`), `TeamsPage` (`useDeleteTeam`),
+  `CompetitorsPage` (`useDeleteCompetitor`).
 
-### Paso 1 — `src/utils/media.ts` (NUEVO)
+  **Con CRUD inline (sin toast):** `CompetitionCategoriesPage` (`useCreateEnabledCategory`,
+  `useUpdateEnabledCategory`, `useDeleteEnabledCategory`).
 
-Mover `resolveMediaUrl()` desde `useAthleteProfile.ts` a util compartido (convención: named export, carpeta `utils`, patrón `utils/leaderboard.ts`):
+  **Formularios (create/edit, navegan al guardar):** `CompetitionFormPage`, `CategoryFormPage`,
+  `AffiliationFormPage`, `LocationFormPage`, `EventFormPage`, `AthleteFormPage`, `TeamFormPage`,
+  `CompetitorFormPage`.
 
-- `mathced`… no: exactamente el cuerpo actual (detectar `http(s)://`; si no, anteponer el origen de `API_BASE_URL` sin el sufijo `/api/v\d*`).
-- Export `resolveMediaUrl(url: string | null | undefined): string | null`.
-- `useAthleteProfile.ts` pasa a importarla desde `@/utils/media` (eliminar la copia privada).
+  **Altas rápidas anidadas (también deben avisar):**
+  - `AthleteFormPage`/`TeamFormPage`: `useCreateCompetitor` al **inscribir** en competición.
+  - `CompetitorFormPage`: `useCreateAthlete`/`useCreateTeam` (creación rápida desde el form,
+    vía `InlineEntitySelect`, líneas ~290 y ~319).
+  - `CompetitionCategoriesPage`: habilitar/editar slots/quitar.
 
-### Paso 2 — `src/types/index.ts`
+  **Ya cumplen (no navegan):** `ScoresPage`, `ScoringPage`.
 
-- `Team`: añadir `profile_photo?: string | null`.
-- `AthleteWritePayload`: añadir `profile_photo?: File | null`.
-- `TeamWritePayload`: añadir `profile_photo?: File | null`.
-- Revisar si hay tipos derivados en otros archivos (no se esperan).
-
-### Paso 3 — `src/api/client.ts` (soporte FormData)
-
-En `doFetch` (línea 72-79):
-
-- Si `init.body instanceof FormData` → **no** llamar `headers.set("Content-Type","application/json")` ni setearlo (el navegador añade `multipart/form-data; boundary=...`).
-- El resto del flujo (Bearer si `auth && token`, refresh 401, `ApiError`) **sin cambios**.
-
-### Paso 4 — `src/api/admin.ts` (multipart + variantes públicas)
-
-- Helper privado `formDataFromPayload(payload, photo: File | null | undefined, removePhoto: boolean): FormData` (o inline en cada función): agrega cada campo de texto y, según estado de la foto:
-  - archivo → `fd.append("profile_photo", file)`
-  - "quitar foto" → `fd.append("profile_photo", "")`
-  - sin cambios → **no** incluir la clave.
-- `createAthlete(payload)`: `POST "/athletes/"` con `body: FormData` (no JSON).
-- `updateAthlete(payload)`: `PATCH` con `FormData`; conservar `payload.id`.
-- `createTeam(payload)` / `updateTeam(payload)`: ídem `POST/PATCH "/teams/"`.
-- Nuevas funciones **públicas** para el panel sin sesión (no cambiar las existentes, que usan los admin):
-  - `fetchAthletePublic(id)`: `request<Athlete>("/athletes/{id}/", { auth: false })`.
-  - `fetchTeamPublic(id)`: `request<Team>("/teams/{id}/", { auth: false })`.
-- `fetchAffiliation` se reutiliza para el box; si se decide leerlo público, añadir `fetchAffiliationPublic(id)` con `auth: false` (opcional, mismo patrón).
-
-### Paso 5 — `src/pages/admin/AthleteFormPage.tsx` (campo de foto)
-
-- Estado local: `photoFile: File | null`, `removePhoto: boolean`, `photoError: string | null`.
-- Validación en `onChange` del input `type="file"` `accept="image/png,image/jpeg,image/webp"`: tipo permitido y ≤ 5 MB (mensaje en `photoError`/campo con `role="alert"`), **no emitir petición** si inválido.
-- Preview: `URL.createObjectURL(photoFile)` en un `useMemo`/`useState`; si no hay archivo nuevo pero existe `detailQuery.data.profile_photo`, mostrar esa URL (resuelta con `resolveMediaUrl`); si `removePhoto`, mostrar placeholder.
-- Botón "Quitar foto" (solo edición y/o cuando hay foto) que setea `removePhoto=true` y limpia el input; botón para re-seleccionar.
-- `onSubmit`: construir payload `{ ...campos, profile_photo: photoFile }`; si `removePhoto` → `profile_photo: ""` (en FormData) para limpiar; conservar el resto del flujo (inscripción opcional, navegación, banner de error).
-- Cleanup: `revokeObjectURL` del preview al desmontar.
-- Bloque visual ubicado antes de "Inscribir en competición" (o tras sexo), estilo TailAdmin (uso de `inputClassName`/`labelClassName` existentes).
-
-### Paso 6 — `src/pages/admin/TeamFormPage.tsx` (campo de foto)
-
-- Mismo patrón que Paso 5 pero con `name` y `detailQuery.data.profile_photo` (una vez que el backend exponga el campo en `Team`; mientras, el preview de edición no tendrá foto previa → solo upload inicial).
-
-### Paso 7 — `src/pages/admin/AthletesPage.tsx` y `TeamsPage.tsx` (avatar en tabla)
-
-- En la columna Nombre (líneas 126-128 y 130-131): `<div className="flex items-center gap-3">` con:
-  - si `profile_photo` → `<img src={resolveMediaUrl(...)} alt={name} className="size-8 rounded-full object-cover" />`
-  - si no → span con **iniciales** (mini helper `initials(name)` — ya existe en `AthletePanel`, mover a `src/utils/` o reutilizar localmente, sin duplicar lógica).
-- Mantener orden/búsqueda igual (el sorteo sigue por nombre).
-
-### Paso 8 — `src/hooks/useAthleteProfile.ts` (público + equipos)
-
-- Generalizar a **participante**: aceptar `participantId: number | null` + `participantType: "athlete" | "team"` (o dos hooks; se prefiere unificar con un tipo `ParticipantKind`).
-- `enabled: participantId != null` (**sin** condición de auth) para consultar también anónimo.
-- queryFn: según tipo → `fetchAthletePublic` o `fetchTeamPublic`; `photoUrl = resolveMediaUrl(profile_photo)`; `box` vía `fetchAffiliation` (auth: falsa o JWT decidida en Paso 4; mientras el endpoint no sea público, degradar a `null`).
-- Mantener la shape `AthleteProfile` (renombrar a `ParticipantProfile` internamente si se unifica; los tests actuales del panel mockean el hook → ajustar mock si cambia el nombre/firma).
-- Invalidar `["athlete-profile", ...]` cuando corresponda (no crítico; `staleTime` corto).
-
-### Paso 9 — `src/pages/public/CompetitionDetail.tsx` (mapeo de equipos)
-
-- Añadir `teamIdByCompetitor` (espejo de `athleteIdByCompetitor`, línea 108-114): `if (competitor.team != null) map.set(competitor.id, competitor.team)`.
-- Al renderizar `AthletePanel`, pasar también el tipo: `participantType={athleteId ? "athlete" : "team"}` y `participantId` (athlete si existe, si no team de la entry); si ninguno → `null`/omiso (comportamiento actual).
-- La selección (`onSelectAthlete`) **no cambia**: la entry ya trae `competitor_id`.
-
-### Paso 10 — `src/components/public/AthletePanel.tsx` (tipo de participante)
-
-- Props: añadir `participantType?: "athlete" | "team"` (default `"athlete"` para no romper usos/tests) o recibir `participantId` en vez de `athleteId` (renombrado).
-- `useAthleteProfile(participantId, participantType)`.
-- Sin cambios de maquetado: `img`/iniciales/Box de origen/Puntos/Posición igual.
-
-### Paso 11 — Tests (actualizar + nuevos)
-
-- `tests/fixtures.ts`:
-  - `makeTeam`: añadir `profile_photo: null`.
-  - (opcional) helper `makeFile()` para `File` fake en formularios.
-- `tests/adminApi.test.ts`: casos para `createAthlete`/`updateAthlete`/`createTeam`/`updateTeam`:
-  - con `FormData` (el `body` de fetch es `instanceof FormData` y **no** incluye `Content-Type: application/json` en headers);
-  - `profile_photo` presente como `File`; ausente en edición sin cambio; `""` cuando "quitar foto";
-  - nuevas `fetchAthletePublic`/`fetchTeamPublic` llaman con `auth: false` (sin header Authorization).
-- `tests/AthleteFormPage.test.tsx`: seleccionar archivo → preview; archivo inválido (>5 MB / tipo) → error, sin submit; "Quitar foto" → payload de limpieza; submit incluye `profile_photo`.
-- `tests/TeamFormPage.test.tsx`: ídem para equipo.
-- `tests/AthletesPage.test.tsx` / `tests/TeamsPage.test.tsx`: avatar con foto (img con `alt`) y fallback iniciales sin foto.
-- `tests/AthletePanel.test.tsx`: ajustar mock del hook a la nueva firma; caso **equipo** (tipo team, foto + box); caso **sin sesión/fallback** (photo null → iniciales, sin `img`).
-- `tests/CompetitionDetail.test.tsx`: caso "click en nombre de un equipo abre el panel con tipo team" (mock de `useCompetitors` con `makeCompetitor({ competitor_type: "TEAM", team: 20, athlete: null })`).
-- Suite esperada: **200 actuales ± cambios ≈ 205–212** (renombres + añadidos).
-
-### Paso 12 — Verificación
-
-1. `npm run typecheck` → sin errores.
-2. `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
-3. `npm run test` → suite completa en verde (≈205–212).
-4. `npm run build` → OK (warning chunk >500 kB preexistente).
-
-### Paso 13 — Verificación manual + documentación
-
-- Manual (usuario): crear/editar atleta y equipo con foto (subida multipart, preview, quitar);
-  tablas admin con avatar; en `/competitions/{slug}/` hacer click en nombre de un **atleta** y de un
-  **equipo** → panel muestra foto + box (con backend abierto) o iniciales (degradación).
-- `Process.md`: cerrar Paso 38. `RESULTADOS.md`: iteración Parte II-N con verificación.
-- `PLAN.md`: marcar pasos ✅.
-- **Avisar al usuario los 3 cambios backend pendientes** (sección 8) para que la foto sea
-  subible en equipos (serializer), visible en público (lectura AllowAny) y cargable (`/media/`).
+- **Formularios usan `mutateAsync` + `navigate`** (ej. `CompetitorFormPage.tsx:170-176`), así que
+  `showToast(...)` debe llamarse **antes** de `navigate` (o justo después de `mutateAsync`); el host
+  global lo mantiene visible.
+- **Borrados** usan `mutate(id, { onSuccess/onError/onSettled })` (ej. `TeamsPage.tsx:53`): agregar
+  `onSuccess: () => showToast(...)`.
+- Tests de listas mockean la mutación como `({ mutate: vi.fn(), isPending: false })`, por lo que el
+  `onSuccess` **no** se dispara solo: habrá que hacer que el mock invoque `options.onSuccess()`
+  (ver Paso 9).
 
 ---
 
-## 4. Seguimiento
+## 3. Clave técnica (piezas a crear)
 
-| Paso | Estado |
-|---|---|
-| 0. Registrar inicio en `Process.md` (Paso 38) | ✅ hecho |
-| 1. `src/utils/media.ts` (`resolveMediaUrl` compartido) | ✅ hecho |
-| 2. `src/types/index.ts` (`Team.profile_photo`, WritePayload con `File`) | ✅ hecho |
-| 3. `src/api/client.ts` (no forzar Content-Type con FormData) | ✅ hecho |
-| 4. `src/api/admin.ts` (multipart + `fetchAthletePublic`/`fetchTeamPublic`) | ✅ hecho |
-| 5. `AthleteFormPage.tsx` (campo foto + preview + quitar + validación) | ✅ hecho |
-| 6. `TeamFormPage.tsx` (ídem) | ✅ hecho |
-| 7. `AthletesPage.tsx` / `TeamsPage.tsx` (avatar en tabla) | ✅ hecho |
-| 8. `useAthleteProfile.ts` (público, equipo, `auth: false`) | ✅ hecho |
-| 9. `CompetitionDetail.tsx` (mapeo team → panel tipo team) | ✅ hecho |
-| 10. `AthletePanel.tsx` (participante atleta/equipo) | ✅ hecho |
-| 11. Tests (fixtures, adminApi, forms, pages, panel, detail) | ✅ hecho (200 → 217) |
-| 12. Verificación (typecheck, lint, test, build) | ✅ hecho |
-| 13. Documentar en `Process.md`/`RESULTADOS.md` + avisos backend | ✅ hecho (backend en `RESULTADOS.md`) |
+1. **Store** `src/store/toastStore.ts` (named exports, patrón `authStore`):
+   ```ts
+   interface ToastItem { id: number; message: string }
+   interface ToastState {
+     toasts: ToastItem[];
+     showToast: (message: string) => void;
+     dismissToast: (id: number) => void;
+   }
+   export const useToastStore = create<ToastState>()((set) => ({ ... }));
+   export const showToast = (message: string) => useToastStore.getState().showToast(message);
+   ```
+   - `id` incremental (módulo-scope o `Date.now()`+contador).
+   - **Sin** `persist`. Mensaje vacío/`""` se ignora (defensivo).
+2. **Host** `src/components/common/ToastHost.tsx`:
+   - Lee `toasts` del store, renderiza **stack** (columna, `bottom-5 right-5`, `z-[100]`,
+     `gap-2`) con un `<Toast key={id} message onClose={() => dismissToast(id)} />` por item.
+   - Devuelve `null` si no hay toasts. No props.
+3. **Montaje** en `AdminLayout` (`LayoutContent`, dentro del `div` raíz): `<ToastHost />`.
+   - Opcional: también en `PublicLayout` (no requerido por la regla; se puede omitir).
+4. **Helper imperativo** `showToast(mensaje)`: permite llamarlo desde `onSuccess`/callbacks sin hook.
+   (Alternativa: `const { showToast } = useToastStore()` en el componente; el helper evita re-render
+   y funciona dentro de opciones de `mutate`.)
 
-> Nota: durante la ejecución se añadieron `src/utils/initials.ts` y
-> `src/components/common/Avatar.tsx` (helper de iniciales compartido y avatar con fallback), y
-> `fetchAffiliationPublic` para que el panel público resuelva el box sin JWT.
+**Nombres de mensajes por entidad (propuesta, español, sin punto final opcional):**
 
----
-
-## 5. Verificación de cierre (checklist)
-
-- [x] `npm run typecheck` → sin errores.
-- [x] `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
-- [x] `npm run test` → 217/217 en verde (25 archivos).
-- [x] `npm run build` → OK.
-- [x] Alta/edición de atleta con foto → `POST/PATCH /athletes/` como `multipart/form-data`.
-- [x] Alta/edición de equipo con foto → `POST/PATCH /teams/` como `multipart/form-data`.
-- [x] Editar sin tocar foto → no se envía `profile_photo` (la foto se conserva).
-- [x] "Quitar foto" → se envía `profile_photo: ""` (el backend limpia).
-- [x] Validación: >5 MB o tipo no soportado → mensaje de error, no se emite petición.
-- [x] `request()` con `FormData` → sin `Content-Type` manual (boundary del navegador).
-- [x] Avatares en `/admin/athletes` y `/admin/teams` (foto o iniciales).
-- [x] Panel público sin sesión: click en nombre → `auth: false`, muestra foto/box o iniciales.
-- [x] Click en nombre de un **equipo** → panel con foto del equipo.
-- [x] Sin regresiones en la suite ni en los públicos existentes.
-- [x] Avisos backend comunicados al usuario (serializer `Team`, lectura pública, `/media/`).
+| Dominio | Crear | Editar | Borrar |
+|---|---|---|---|
+| Competición | "Competición creada." | "Competición actualizada." | "Competición eliminada." |
+| Categoría (catálogo) | "Categoría creada." | "Categoría actualizada." | "Categoría eliminada." |
+| Categoría habilitada | "Categoría habilitada." | "Slots actualizados." | "Categoría deshabilitada." |
+| Filiación | "Filiación creada." | "Filiación actualizada." | "Filiación eliminada." |
+| Sede | "Sede creada." | "Sede actualizada." | "Sede eliminada." |
+| Evento/WOD | "Evento creado." | "Evento actualizado." | "Evento eliminado." |
+| Atleta | "Atleta creado." | "Atleta actualizado." | "Atleta eliminado." |
+| Equipo | "Equipo creado." | "Equipo actualizado." | "Equipo eliminado." |
+| Competidor | "Competidor creado." | "Competidor actualizado." | "Competidor eliminado." |
+| Inscripción (desde form atleta/equipo) | "Inscrito en la competición." | — | — |
 
 ---
 
-## 6. Fuera de alcance
+## 4. Pasos de ejecución
 
-- **Backend**: sin tocar desde el frontend. Los 3 avisos (sección 8) los aplica el usuario.
-- **Cropper/compresión de imagen** en cliente (se sube el archivo tal cual).
-- **Galería/listado público de atletas** ni página de perfil propia: la foto pública solo se ve
-  en `AthletePanel` (click en el nombre del leaderboard) y como avatar en el admin.
-- **`TeamMember`/roster** y foto en `Competitor` (no se tocan).
-- **`aufiliation` en `AthleteWritePayload`**: no se añade en esta iteración (aviso dentro de la
-  spec como follow-up opcional).
-- **Hombre de sala de unión**: no se generaliza el panel a otros públicos más allá del leaderboard.
+### Fase A — Infraestructura (base reutilizable)
+- **Paso 0.** Documentar inicio en `Process.md` (nuevo paso: "Toasts de confirmación en CRUD").
+- **Paso 1.** Crear `src/store/toastStore.ts` (`useToastStore`, `showToast`, `ToastItem`).
+- **Paso 2.** Crear `src/components/common/ToastHost.tsx` (stack + reutiliza `Toast`).
+- **Paso 3.** Montar `<ToastHost />` en `src/layout/AdminLayout.tsx`.
+
+### Fase B — Listas: toast en borrados
+- **Paso 4.** En cada lista, agregar `onSuccess: () => showToast("...")` al `mutate` de borrado:
+  `CompetitionsPage`, `CategoriesPage`, `AffiliationsPage`, `LocationsPage`, `EventsPage`,
+  `AthletesPage`, `TeamsPage`, `CompetitorsPage`.
+  - Conservar `onError`/`onSettled` actuales (`setDeletingId`). No usar toast para el error.
+
+### Fase C — `CompetitionCategoriesPage` (CRUD inline)
+- **Paso 5.** Añadir `showToast` en:
+  - habilitar categoría (`createMutation`),
+  - editar `finalist_slots` (`updateMutation`),
+  - quitar habilitación (`deleteMutation`).
+
+### Fase D — Formularios (crear/editar)
+- **Paso 6.** En cada form, llamar `showToast(<msg>)` tras `mutateAsync` exitoso y **antes** de
+  `navigate`: `CompetitionFormPage`, `CategoryFormPage`, `AffiliationFormPage`, `LocationFormPage`,
+  `EventFormPage`, `AthleteFormPage`, `TeamFormPage`, `CompetitorFormPage`.
+  - Mensaje según **crear vs editar** (`isEditing`).
+  - Mantener los `catch` actuales (banner de error), sin toast de error.
+- **Paso 7.** Altas rápidas anidadas:
+  - `AthleteFormPage`/`TeamFormPage`: toast al inscribir con `createCompetitorMutation`
+    (independiente del toast de crear/editar el atleta/equipo).
+  - `CompetitorFormPage`: toast en `createAthleteMutation` y `createTeamMutation`
+    (creación rápida desde `InlineEntitySelect`).
+
+### Fase C/D-bis — Migración opcional de toasts existentes
+- **Paso 8. (opcional)** Migrar `ScoresPage`/`ScoringPage` de estado local a `showToast` para
+  unificar; eliminar el `useState` local de toast y el `<Toast>` manual. Conservar el texto actual.
+  *(Bajo riesgo; se puede omitir sin afectar la regla.)*
+- `CompetitionDetail` (público, copiar enlace): **no** se toca (no es CRUD).
+
+### Fase E — Tests
+- **Paso 9.**
+  - Nuevo `tests/toastStore.test.ts`: `showToast` agrega item, ignora vacío, `dismissToast` quita.
+  - Nuevo `tests/ToastHost.test.tsx`: renderiza los mensajes del store, `onClose` los quita,
+    `null` cuando no hay.
+  - Actualizar tests de páginas para afirmar el toast tras la mutación:
+    - **Listas:** cambiar el mock `useDeleteX: () => ({ mutate: vi.fn((id, opts) => opts?.onSuccess?.()), ... })`
+      o espiar para invocar `onSuccess`; luego `expect(useToastStore.getState().toasts)` contiene el mensaje.
+    - **Formularios con test existente** (`AthleteFormPage`, `TeamFormPage`, `CompetitorFormPage`):
+      el mock de `mutateAsync` resuelve y se afirma el toast (store) antes de/navegar.
+    - Añadir cobertura mínima a formularios sin test (`CategoryFormPage`, `CompetitionFormPage`,
+      `LocationFormPage`, `AffiliationFormPage`, `EventFormPage`) o, como mínimo, a `ToastHost`+store.
+  - `beforeEach`: reset `useToastStore.setState({ toasts: [] })` para aislar.
+  - Alternativa a montar el host en cada test: importar y renderizar `<ToastHost />` junto a la página;
+    se evalúa en ejecución (la vía **store** evita acoplar los tests al layout).
+- **Paso 10.** Verificación final: `npm run typecheck`, `npm run lint`, `npm run test`,
+  `npm run build` (los 4 en verde; sin errores nuevos de ESLint).
+
+### Fase F — Documentación
+- **Paso 11.**
+  - `Process.md`: registrar el paso y su cierre.
+  - `RESULTADOS.md`: resumen de la iteración + tests antes/después.
+  - `PROMPT.md`: ajustar el bullet *Feedback de mutaciones* para citar el patrón definitivo
+    (`toastStore` + `showToast` + `ToastHost` en `AdminLayout`) en lugar de "estado local".
+  - Actualizar este `PLAN.md`: marcar seguimiento y verificación.
 
 ---
 
-## 7. Restricciones que se mantienen
+## 5. Archivos afectados (resumen)
 
-- **NO** tocar el clon `free-react-tailwind-admin-dashboard/` (solo lectura).
-- **NO** crear ramas, **NO** push, **NO** commit sin pedido explícito.
-- **NO** ejecutar comandos del backend.
-- Sin comentarios en código salvo que se soliciten.
-- Textos en español; tema claro; sin i18n; sin `any`; accesibilidad (roles, `aria-label`,
-  `aria-sort`, `alt` en imágenes) mantenida.
-- Sin emojis excepto los ya existentes (iniciales = texto, no emoji).
-- Fixtures solo en `tests/`; sin mock de datos en producción.
+**Nuevos**
+- `src/store/toastStore.ts`
+- `src/components/common/ToastHost.tsx`
+- `tests/toastStore.test.ts`
+- `tests/ToastHost.test.tsx`
+
+**Modificados (infra)**
+- `src/layout/AdminLayout.tsx` (montar `<ToastHost />`)
+
+**Modificados (listas / borrado)**
+- `CompetitionsPage.tsx`, `CategoriesPage.tsx`, `AffiliationsPage.tsx`, `LocationsPage.tsx`,
+  `EventsPage.tsx`, `AthletesPage.tsx`, `TeamsPage.tsx`, `CompetitorsPage.tsx`,
+  `CompetitionCategoriesPage.tsx`
+
+**Modificados (formularios / alta-edición + altas rápidas)**
+- `CompetitionFormPage.tsx`, `CategoryFormPage.tsx`, `AffiliationFormPage.tsx`,
+  `LocationFormPage.tsx`, `EventFormPage.tsx`, `AthleteFormPage.tsx`, `TeamFormPage.tsx`,
+  `CompetitorFormPage.tsx`
+
+**Modificados (opcional)**
+- `ScoresPage.tsx`, `ScoringPage.tsx` (migración a `showToast`)
+
+**Tests modificados**
+- `AthletesPage.test.tsx`, `TeamsPage.test.tsx`, `CompetitorsPage.test.tsx`,
+  `CompetitionsPage.test.tsx`, `CategoriesPage.test.tsx`, `AffiliationsPage.test.tsx`,
+  `LocationsPage.test.tsx`, `CompetitionCategoriesPage.test.tsx`,
+  `AthleteFormPage.test.tsx`, `TeamFormPage.test.tsx`, `CompetitorFormPage.test.tsx`
+  (+ nuevos de formularios sin test, si se decide).
+
+**Documentación**
+- `PROMPT.md`, `Process.md`, `RESULTADOS.md`, `PLAN.md`
 
 ---
 
-## 8. AVISOS BACKEND (los aplica el usuario, no el agente)
+## 6. Verificación (criterios de aceptación)
 
-1. **`TeamSerializer` sin foto**: en `leader\Scorely/apps/participants/serializers.py`,
-   `TeamSerializer.Meta.fields` = `('id', 'name', 'affiliation')` → falta `'profile_photo'`
-   (el modelo ya lo tiene, migración `0004` aplicada). Sin este cambio no se puede subir/leer
-   la foto del equipo.
-2. **Lectura pública del perfil**: `AthleteViewSet`/`TeamViewSet` usan `IsAuthenticated` →
-   `/athletes/{id}/`, `/teams/{id}/` y `/affiliations/{id}/` no están disponibles para el panel
-   sin sesión. Abrir la lectura (`AllowAny`/`IsAuthenticatedOrReadOnly`) para que la foto + box
-   se vean en público. Mientras tanto el panel degrada a iniciales + `—`.
-3. **Media no servida**: `config/urls.py` no monta
-   `+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)` en modo dev → toda URL
-   `/media/...` responde **404** (en prod depende del storage/CDN). Sin este cambio la foto se
-   sube pero no carga.
+| # | Escenario | Resultado esperado |
+|---|---|---|
+| 1 | Crear cualquiera de las entidades desde un formulario | Al volver a la lista se ve el **toast** "… creado/actualizado." |
+| 2 | Editar cualquiera de las entidades | Al volver a la lista se ve el **toast** "… actualizado." |
+| 3 | Eliminar desde una lista (tras `window.confirm`) | Se ve el **toast** "… eliminado." |
+| 4 | Habilitar/editar slots/quitar categoría de competición | Toast correspondiente |
+| 5 | Inscribir desde `AthleteFormPage`/`TeamFormPage` | Toast "Inscrito en la competición." |
+| 6 | Creación rápida de atleta/equipo en `CompetitorFormPage` | Toast "Atleta/Equipo creado." |
+| 7 | Error de mutación | **No** aparece toast de éxito; sigue el banner `role="alert"`/`ErrorState` |
+| 8 | El toast navega junto con el usuario (form → lista) | Sigue visible tras `navigate` y auto-cierra a los 4 s |
+| 9 | `typecheck` / `lint` / `test` / `build` | Todo en verde (lint sin errores nuevos) |
+
+---
+
+## 7. Riesgos / observaciones
+
+- **No usar `Toast` para errores:** su estilo es de éxito (`success-*`). Errores → banner/`ErrorState`.
+- **Doble toast al inscribir** desde `AthleteFormPage`/`TeamFormPage`: si se crea entidad **e**
+  inscripción a la vez, podrían mostrarse 2 toasts. Decidir: priorizar el de inscripción o un único
+  mensaje compuesto (p. ej. "Atleta creado e inscrito."). Definir en ejecución.
+- **Stacking:** `Varios toasts` se apilan en columna; hay que garantizar el contenedor con `z-[100]`
+  y que no tape acciones (mismo sitio que el actual `bottom-5 right-5`).
+- **Tests de listas:** los mocks actuales de mutación no disparan `onSuccess`; hay que ajustarlos
+  (riesgo de tests que "pasan" sin verificar realmente el toast → afirmar contra el store).
+- **Migración de `ScoresPage`/`ScoringPage`** puede alterar sus tests (líneas ~274 y ~224): hacerlo
+  solo en el paso opcional.
+- **`CompetitionDetail` (público)** queda fuera (no es alta/edición/borrado).
+- No tocar la carpeta clon de TailAdmin, no crear ramas ni git, no tocar backend.
+
+---
+
+## 8. Definición de "hecho"
+
+- Store + host implementados y montados en `AdminLayout`.
+- **Todas** las altas, ediciones y borrados del panel `/admin/*` muestran toast de éxito
+  (incluidas altas rápidas e inscripciones).
+- Errores sin cambios (banner/`ErrorState`).
+- Tests nuevos + actualizados en verde; `typecheck`/`lint`/`build` OK.
+- `PROMPT.md`, `Process.md`, `RESULTADOS.md` y este `PLAN.md` actualizados.
+
+---
+
+## 9. Resultado de la ejecución (2026-10-06)
+
+- **Fases A–E completadas.** `showToast`/`ToastHost` montados en `AdminLayout`; toasts en las 8 listas
+  con borrado, `CompetitionCategoriesPage` (habilitar/slots/quitar) y los 8 formularios
+  (crear/editar + altas rápidas e inscripciones).
+- **Paso 8 (migración de `ScoresPage`/`ScoringPage`) omitido** — siguen con su `Toast` local; no afecta
+  la regla (ya cumplen, no navegan) y evita romper sus tests.
+- **Doble toast al inscribir:** resuelto con mensaje compuesto ("Atleta/Equipo creado e inscrito en la
+  competición.") en vez de dos toasts.
+- **Verificación:** `npm run typecheck` OK · `npm run lint` OK (0 errores; 1 warning preexistente en
+  `SidebarContext.tsx`) · `npm run test` **242/242 en 28 archivos** · `npm run build` OK.
+- Ver `RESULTADOS.md` → sección "Toasts de confirmación en CRUD" para el detalle.

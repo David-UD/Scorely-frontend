@@ -860,7 +860,59 @@ Sin cambios de backend.
 
 ---
 
-## Criterios de aceptación (PROMPT §11)
+## Iteración 2026-10-06 — Toasts de confirmación en CRUD `/admin/*` (ejecución de `PLAN.md`)
+
+> Implementa la regla de `PROMPT.md` (**"toda operación que cree, edite o elimine información debe
+> confirmarse con un toast"**) en las 8 listas con borrado, el CRUD inline de
+> `CompetitionCategoriesPage` y los 8 formularios de crear/editar, incluidas altas rápidas e
+> inscripciones. Reutiliza `Toast` sin duplicar su diseño. Opción A del plan: **store global +
+> host** (el estado local no sobrevive a la navegación de los formularios).
+
+### Archivos nuevos
+- `src/store/toastStore.ts`: `useToastStore` (Zustand, `toasts: {id,message}[]`, `showToast`,
+  `dismissToast`) + helper imperativo `showToast(message)` (`getState()`); ignora mensajes vacíos;
+  `nextId` a nivel módulo; sin `persist`.
+- `src/components/common/ToastHost.tsx`: lee el store y renderiza un stack (`fixed right-5 bottom-5
+  z-[100] flex flex-col gap-3`) con un `<Toast floating={false}>` por item; `null` si no hay toasts.
+
+### Archivos modificados
+- `src/components/common/Toast.tsx`: nueva prop opcional `floating?: boolean` (default `true`); con
+  `false` no aplica el posicionamiento fijo (lo controla el host).
+- `src/layout/AdminLayout.tsx`: monta `<ToastHost />` una sola vez dentro de `LayoutContent`.
+- **Listas con borrado** (`onSuccess: () => showToast("… eliminado/a.")`):
+  `AthletesPage`, `TeamsPage`, `CompetitorsPage`, `CompetitionsPage`, `CategoriesPage`,
+  `AffiliationsPage`, `LocationsPage`, `EventsPage`.
+- **`CompetitionCategoriesPage`** (CRUD inline): "Categoría habilitada." (crear), "Slots
+  actualizados." (editar) y "Categoría deshabilitada." (borrar).
+- **Formularios** (`showToast` antes de `navigate`, mensaje según `isEditing`):
+  `CategoryFormPage`, `AffiliationFormPage`, `LocationFormPage`, `CompetitionFormPage`,
+  `EventFormPage`, `AthleteFormPage`, `TeamFormPage`, `CompetitorFormPage`.
+  - Altas rápidas: `CompetitorFormPage` → "Atleta creado."/"Equipo creado." desde `InlineEntitySelect`.
+  - Inscripción al crear atleta/equipo: **mensaje compuesto** ("Atleta/Equipo creado e inscrito en
+    la competición.") para evitar doble toast; si la inscripción falla, se mantiene "Atleta/Equipo
+    creado." + banner de error y no se navega (reintento sin duplicar vía `createdAthlete/TeamRef`).
+- `ScoresPage`/`ScoringPage`: **sin cambios** (migración opcional omitida; ya cumplen y no navegan).
+
+### Tests
+- Nuevos: `tests/toastStore.test.ts` (5) y `tests/ToastHost.test.tsx` (3).
+- Actualizados con aserción de toast (contra el store): `TeamsPage`, `AffiliationsPage`,
+  `LocationsPage`, `CompetitorsPage`, `AthletesPage`, `CompetitionsPage`, `CategoriesPage`,
+  `CompetitionCategoriesPage` (habilitar/slots/quitar), `AthleteFormPage`, `TeamFormPage`,
+  `CompetitorFormPage`. Los mocks de mutación pasan a invocar `options.onSuccess(...)`.
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **242/242** en verde (28 archivos) — 217 → 242 (+25 tests) |
+| `npm run build` | OK (Vite 6.4.3; warning de chunk >500 kB preexistente) |
+
+### Notas
+- Los errores de mutación siguen como banner `role="alert"`/`ErrorState` (el `Toast` es de éxito).
+- No se crearon ramas ni se hizo commit/push.
+
+---
 
 - [x] build sin errores
 - [x] lint sin errores
@@ -889,6 +941,7 @@ Sin cambios de backend.
 - [x] (2026-09-23) módulo admin de resultados: entrada masiva por evento en `/admin/scores` (scope + select de WOD + grilla con inputs + guardado POST/PATCH/DELETE; el backend recalcula `event_rank`/`score` on-read) + toast de éxito tras guardar + **filtro opcional por categoría** (Parte II-K) — **158 → 173/173**
 - [x] (2026-09-24) módulo admin de scoring: tabla posición → puntos en `/admin/scoring` por scope con grilla editable, panel "Regla general" (base, descenso, hasta N + preview en vivo + botón único "Generar y guardar") siempre visible y tabla en acordeón, guardado POST/PATCH/DELETE por fila; "Scoring" habilitado en el sidebar y se oculta "Próximamente" (Parte II-L) — **173 → 191/191**
 - [x] (2026-09-24) **rediseño landing de competición `CompetitionDetail`** (Parte II-M, solo UI/UX): hero con métricas, action bar (anclas + Compartir), Info + Mapa a la misma altura, tarjetas de categorías con carrusel móvil, WODs como tarjetas con badge de fase, progreso ●/○, leaderboard con sticky/hover/podio/`—` — **191 → 200/200**
+- [x] (2026-10-06) **toasts de confirmación en CRUD `/admin/*`**: store global `toastStore` + `ToastHost` en `AdminLayout` con helper `showToast`; toasts de éxito en las 8 listas con borrado, el CRUD inline de categorías habilitadas y los 8 formularios de crear/editar (incluidas altas rápidas e inscripciones); errores sin cambios (banner/`ErrorState`) — **217 → 242/242**
 
 ## No se tocó
 

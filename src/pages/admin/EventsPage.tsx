@@ -5,6 +5,7 @@ import {
   useDeleteEvent,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { showToast } from "@/store/toastStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
@@ -44,6 +45,7 @@ export default function EventsPage() {
     }
     setDeletingId(id);
     deleteMutation.mutate(id, {
+      onSuccess: () => showToast("Evento eliminado."),
       onSettled: () => setDeletingId(null),
     });
   };

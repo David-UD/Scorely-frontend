@@ -4,6 +4,9 @@ import { renderWithProviders, queryResult } from "./utils";
 import { makeAthlete } from "./fixtures";
 import AthletesPage from "@/pages/admin/AthletesPage";
 import { useAdminAthletes } from "@/hooks/useAdminModules";
+import { useToastStore } from "@/store/toastStore";
+
+const deleteMutate = vi.fn();
 
 vi.mock("@/hooks/useAdminModules", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/useAdminModules")>(
@@ -13,7 +16,7 @@ vi.mock("@/hooks/useAdminModules", async () => {
     ...actual,
     useAdminAthletes: vi.fn(),
     useDeleteAthlete: () => ({
-      mutate: vi.fn(),
+      mutate: deleteMutate,
       isPending: false,
     }),
   };
@@ -142,5 +145,26 @@ describe("AthletesPage", () => {
 
     expect(screen.getByText("Atleta25 Test")).toBeDefined();
     expect(screen.queryByText("Atleta21 Test")).toBeNull();
+  });
+
+  it("shows a success toast after deleting an athlete", () => {
+    deleteMutate.mockReset();
+    useToastStore.setState({ toasts: [] });
+    deleteMutate.mockImplementation(
+      (_: number, options: { onSuccess?: () => void }) => options?.onSuccess?.(),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedAthletes.mockReturnValue(
+      queryResult({
+        isLoading: false,
+        data: [makeAthlete({ id: 1, first_name: "Ana", last_name: "López" })],
+      }),
+    );
+    renderWithProviders(<AthletesPage />);
+    screen.getByText("Eliminar").click();
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      "Atleta eliminado.",
+    );
+    confirmSpy.mockRestore();
   });
 });

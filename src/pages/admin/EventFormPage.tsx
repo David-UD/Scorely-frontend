@@ -11,6 +11,7 @@ import {
   useUpdateEvent,
 } from "@/hooks/useAdminModules";
 import { useAdminScopeStore } from "@/store/adminScopeStore";
+import { showToast } from "@/store/toastStore";
 import CompetitionScopeSelect from "@/components/admin/CompetitionScopeSelect";
 import PageBreadcrumb from "@/components/admin/PageBreadcrumb";
 import Spinner from "@/components/common/Spinner";
@@ -126,8 +127,10 @@ export default function EventFormPage() {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync(payload);
+        showToast("Evento actualizado.");
       } else {
         await createMutation.mutateAsync(payload);
+        showToast("Evento creado.");
       }
       navigate("/admin/events", { replace: true });
     } catch (err) {
