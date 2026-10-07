@@ -1023,3 +1023,70 @@ host**: `showToast(msg)` imperativo (`toastStore`) + `<ToastHost />` montado una
 - Errores de mutación: sin cambios (banner `role="alert"`/`ErrorState`); el `Toast` es de éxito.
 - `ScoresPage`/`ScoringPage`: migración opcional **omitida** (ya cumplen, no navegan).
 - Sin ramas ni commit/push.
+
+---
+
+## Paso 40 — Dashboard admin con gráficos (Recharts) (COMPLETADO)
+
+Fecha: 2026-10-07 · Estado: **cerrado** ✅
+
+### Objetivo
+Agregar gráficos al dashboard de administración (`/admin`): atletas, equipos, categorías,
+evolución del scoring y resultados. Librería elegida por el usuario: **Recharts** (el clon de
+referencia usa ApexCharts, pero se optó Recharts por ser más ligera y "React-native").
+
+### Instalación
+- `npm install recharts` → **recharts@3.10.1** (única dependencia nueva).
+
+### Componentes creados (`src/components/admin/charts/`)
+- `ChartCard.tsx`: tarjeta contenedora (título + subtítulo + children) con el estilo de las
+  tarjetas admin (`rounded-xl border bg-white p-5 shadow-theme-xs`).
+- `AthletesByAffiliationChart.tsx`: **BarChart** global — atletas por afiliación (join
+  `athlete.affiliation` → nombre; "Sin afiliación" / "Desconocida").
+- `TeamsByAffiliationChart.tsx`: **PieChart** global — equipos por afiliación (paleta de 6 colores).
+- `CompetitorsByCategoryChart.tsx`: **BarChart horizontal** por scope — inscripciones por categoría
+  habilitada (nombre resuelto por catálogo; solo categorías habilitadas).
+- `ScoringEvolutionChart.tsx`: **LineChart** por scope — puntos por posición (ordenado por posición).
+- `ResultsByEventChart.tsx`: **BarChart** por scope — puntaje promedio por evento (`useQueries` sobre
+  `fetchEventCompetitors` por evento; etiquetas "WOD N" / "Final").
+
+### Utilidades (`src/utils/dashboard.ts`)
+- `countByAffiliation(items, affiliations)`: agrupa y ordena por conteo desc.
+- `averageScore(results)`: promedio de `score` no nulos (null si no hay).
+
+### Integración (`src/pages/admin/admin/AdminDashboard.tsx`)
+- 4 **tarjetas de métricas** (Atletas / Equipos / Inscripciones / Eventos) con link al módulo.
+- `CompetitionScopeSelect` (mismo patrón que el resto de páginas con scope).
+- Grid `lg:grid-cols-2` con los 5 gráficos + tarjeta "Accesos rápidos" (competiciones, resultados,
+  scoring, categorías por competición).
+- Estados `Spinner`/`EmptyState` por gráfico, como el resto de páginas.
+
+### Build
+- `vite.config.ts`: `manualChunks: { recharts: ["recharts"] }` → chunk propio de 416 kB
+  (gzip 121 kB); bundle principal vuelve a 585 kB (warning >500 kB preexistente).
+
+### Tests (242 → **268**; 28 → 35 archivos)
+- `__mocks__/recharts.tsx`: mock ligero (los charts renderizan `data-chart-data` con el JSON
+  del `data` recibido; `Pie` expone el suyo). Registrado con `vi.mock("recharts", ...)` en
+  cada archivo de test (el mock automático de raíz no se aplicó con recharts v3).
+- `tests/dashboardUtils.test.ts` (5): `countByAffiliation` (grupos, "Desconocida", vacío) y
+  `averageScore` (promedio, null).
+- Un archivo por gráfico (3 c/u): loading, empty y datos esperados vía `data-chart-data`.
+- `tests/AdminDashboard.test.tsx` (6): métricas, 5 gráficos renderizados, y datos de
+  atletas/categorías/scoring/resultados alimentados con fixtures.
+
+### Verificación
+- `npm run typecheck` → OK.
+- `npm run lint` → 0 errores (1 warning preexistente `SidebarContext.tsx`).
+- `npm run test` → **268/268** en verde (35 archivos).
+- `npm run build` → OK (chunk propio de recharts).
+
+### Notas / avisos
+- **Sin tocar el backend**: todos los datos salen de endpoints ya existentes
+  (`athletes`, `teams`, `affiliations`, `competitors`, `enabled-competition-categories`,
+  `competition-categories`, `scoring-rules`, `events`, `event-competitors`).
+- **Resultados por evento = N+1 queries** (una por evento vía `useQueries`); aceptable para la
+  cantidad de WODs de una competición.
+- **Paginación `page_size=100`**: igual que el resto de listados admin.
+- Verificación manual (contrar con la UI) → **pendiente del usuario**.
+- Sin ramas ni commit/push.

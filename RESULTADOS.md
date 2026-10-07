@@ -942,6 +942,47 @@ Sin cambios de backend.
 - [x] (2026-09-24) módulo admin de scoring: tabla posición → puntos en `/admin/scoring` por scope con grilla editable, panel "Regla general" (base, descenso, hasta N + preview en vivo + botón único "Generar y guardar") siempre visible y tabla en acordeón, guardado POST/PATCH/DELETE por fila; "Scoring" habilitado en el sidebar y se oculta "Próximamente" (Parte II-L) — **173 → 191/191**
 - [x] (2026-09-24) **rediseño landing de competición `CompetitionDetail`** (Parte II-M, solo UI/UX): hero con métricas, action bar (anclas + Compartir), Info + Mapa a la misma altura, tarjetas de categorías con carrusel móvil, WODs como tarjetas con badge de fase, progreso ●/○, leaderboard con sticky/hover/podio/`—` — **191 → 200/200**
 - [x] (2026-10-06) **toasts de confirmación en CRUD `/admin/*`**: store global `toastStore` + `ToastHost` en `AdminLayout` con helper `showToast`; toasts de éxito en las 8 listas con borrado, el CRUD inline de categorías habilitadas y los 8 formularios de crear/editar (incluidas altas rápidas e inscripciones); errores sin cambios (banner/`ErrorState`) — **217 → 242/242**
+- [x] (2026-10-07) **dashboard admin con gráficos (Recharts)**: `/admin` con 4 tarjetas de métricas + 5 gráficos alimentados con datos reales — atletas por afiliación (barra), equipos por afiliación (pie), inscripciones por categoría (barra horizontal, por scope), evolución del scoring (línea, por scope) y resultados por evento (barra de puntaje promedio, por scope) + accesos rápidos; `recharts@3.10.1` con chunk propio en el build — **242 → 268/268**
+
+## Iteración 2026-10-07 — Dashboard admin con gráficos (Recharts)
+
+> Pedido del usuario: "recharts, atletas, equipos, categorías, evolución del scoring, resultados".
+> El clon de referencia usa ApexCharts; se eligió Recharts (más ligera, API React-native).
+> Sin tocar el backend: todos los gráficos se alimentan de endpoints ya existentes.
+
+### Qué se implementó
+
+| Funcionalidad | Estado |
+|---|---|
+| `/admin` con 4 tarjetas de métricas (atletas, equipos, inscripciones, eventos) | ✅ |
+| Atletas por afiliación — BarChart global | ✅ |
+| Equipos por afiliación — PieChart global | ✅ |
+| Inscripciones por categoría — BarChart horizontal por scope | ✅ |
+| Evolución del scoring — LineChart posición → puntos por scope | ✅ |
+| Resultados por evento — BarChart de puntaje promedio por scope | ✅ |
+| `CompetitionScopeSelect` + tarjeta "Accesos rápidos" | ✅ |
+| Tests: **242 → 268** (+26; 35 archivos) | ✅ |
+
+### Archivos
+- **Nuevos**: `src/components/admin/charts/{ChartCard, AthletesByAffiliationChart, TeamsByAffiliationChart, CompetitorsByCategoryChart, ScoringEvolutionChart, ResultsByEventChart}.tsx`, `src/utils/dashboard.ts`, `__mocks__/recharts.tsx`, `tests/{dashboardUtils, AthletesByAffiliationChart, TeamsByAffiliationChart, CompetitorsByCategoryChart, ScoringEvolutionChart, ResultsByEventChart, AdminDashboard}.test.tsx`.
+- **Modificados**: `src/pages/admin/AdminDashboard.tsx` (de placeholder a dashboard completo), `vite.config.ts` (`manualChunks` para recharts), `package.json` (`recharts@^3.10.1`), `Process.md` (Paso 40).
+
+### Verificación
+| Chequeo | Resultado |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm run lint` | OK (0 errores; 1 warning preexistente `SidebarContext.tsx`) |
+| `npm run test` | **268/268** en verde (35 archivos) |
+| `npm run build` | OK — chunk propio `recharts` 416 kB (gzip 121 kB); bundle principal 585 kB |
+
+### Notas
+- **Resultados por evento = N+1 queries** (una por evento vía `useQueries`); aceptable para la cantidad de WODs de una competición.
+- **Paginación `page_size=100`** en todos los listados, igual que el resto de módulos admin.
+- El mock de recharts se registra con `vi.mock("recharts", ...)` por archivo (el mock automático de raíz no se aplicó con recharts v3).
+- Verificación manual (contrar con la UI) → **pendiente del usuario**.
+- No se crearon ramas ni se hizo commit/push.
+
+---
 
 ## No se tocó
 
