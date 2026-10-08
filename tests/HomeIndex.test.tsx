@@ -55,7 +55,7 @@ describe("HomeIndex", () => {
     expect(screen.getByText("Comp A")).toBeInTheDocument();
     expect(screen.getByText("Comp B")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: /recientes/i }),
+      screen.getByRole("heading", { level: 3, name: /recientes/i }),
     ).toBeInTheDocument();
   });
 
@@ -63,7 +63,7 @@ describe("HomeIndex", () => {
     renderWithProviders(<HomeIndex />);
     await userEvent.click(screen.getByRole("tab", { name: /todas/i }));
     expect(
-      screen.getByRole("heading", { level: 2, name: /todas/i }),
+      screen.getByRole("heading", { level: 3, name: /todas/i }),
     ).toBeInTheDocument();
   });
 

@@ -22,7 +22,7 @@ export default function PublicLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-white">
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className="text-lg font-bold text-gray-900">
@@ -31,23 +31,34 @@ export default function PublicLayout() {
 
           <nav className="flex items-center gap-1">
             <HeaderLink to="/">Inicio</HeaderLink>
-            <Link
-              to={isAuthenticated ? "/admin" : "/login"}
-              className="ml-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
-            >
-              {isAuthenticated ? "Admin" : "Acceder"}
-            </Link>
+        <Link
+          to={isAuthenticated ? "/admin" : "/login"}
+          className="ml-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
+        >
+          Login
+        </Link>
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+      <main className="flex w-full flex-1 flex-col">
         <Outlet />
       </main>
 
       <footer className="mt-auto border-t border-gray-200 bg-white py-6">
         <div className="mx-auto max-w-7xl px-4 text-center text-sm text-gray-400 sm:px-6 lg:px-8">
           © {new Date().getFullYear()} Scorely. Resultados públicos de competiciones deportivas.
+          <span className="whitespace-nowrap">
+            {" · Desarrollado por "}
+            <a
+              href="https://www.linkedin.com/in/david-uc/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-500 transition hover:text-brand-600"
+            >
+              David Uc
+            </a>
+          </span>
         </div>
       </footer>
     </div>

@@ -4,6 +4,7 @@ import Spinner from "@/components/common/Spinner";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
 import Toast from "@/components/common/Toast";
+import Container from "@/components/common/Container";
 import CompetitionHero from "@/components/public/CompetitionHero";
 import WodList from "@/components/public/WodList";
 import CombinedLeaderboardTable from "@/components/public/CombinedLeaderboardTable";
@@ -147,20 +148,26 @@ export default function CompetitionDetail() {
   const leaderboardError = overallQuery.isError;
 
   if (competitionQuery.isLoading) {
-    return <Spinner label="Cargando competición…" />;
+    return (
+      <Container>
+        <Spinner label="Cargando competición…" />
+      </Container>
+    );
   }
 
   if (competitionQuery.isError || !competitionQuery.data) {
     return (
-      <ErrorState
-        title="No se pudo cargar la competición"
-        message={
-          competitionQuery.error instanceof Error
-            ? competitionQuery.error.message
-            : undefined
-        }
-        onRetry={() => competitionQuery.refetch()}
-      />
+      <Container>
+        <ErrorState
+          title="No se pudo cargar la competición"
+          message={
+            competitionQuery.error instanceof Error
+              ? competitionQuery.error.message
+              : undefined
+          }
+          onRetry={() => competitionQuery.refetch()}
+        />
+      </Container>
     );
   }
 
@@ -184,7 +191,7 @@ export default function CompetitionDetail() {
   };
 
   return (
-    <div className="flex flex-col gap-12">
+    <Container className="flex flex-col gap-12">
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       <Link
@@ -408,6 +415,6 @@ export default function CompetitionDetail() {
           onClose={() => setSelectedAthlete(null)}
         />
       )}
-    </div>
+    </Container>
   );
 }
