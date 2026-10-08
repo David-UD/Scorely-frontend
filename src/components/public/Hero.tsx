@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/utils/cn";
+import portada from "@/assets/portada.webp";
 
 const BENEFITS = ["Resultados en vivo", "Leaderboards públicos", "CrossFit & HYROX"];
 
@@ -62,6 +63,17 @@ export default function Hero() {
 
   return (
     <section className="relative isolate flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center overflow-hidden bg-white px-4 py-16 text-center sm:px-6 sm:py-20 lg:px-8">
+      <img
+        src={portada}
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        className="absolute inset-0 -z-20 size-full object-cover object-center"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 bg-gradient-to-b from-white/75 via-white/90 to-white/80"
+      />
       <div
         aria-hidden="true"
         className="absolute inset-0 -z-10"
